@@ -27,26 +27,26 @@ public class JdbcStateMachinePersist implements StateMachinePersist<String, Stri
     @Override
     public void write(StateMachineContext<String, String> context, String reference) throws Exception {
 
-        if (context.getChilds() != null && !context.getChilds().isEmpty())
-            throw new IllegalStateException(
-                    "Nested/parallel machine contexts are not supported by context format 1.");
+        if (context.getChilds() != null && !context.getChilds().isEmpty()) {
+            throw new IllegalStateException("Nested/parallel machine contexts are not supported by context format 1.");
+        }
 
         Map<String, Object> variables = new HashMap<>();
         if (context.getExtendedState() != null) {
             context.getExtendedState()
-                    .getVariables()
-                    .forEach( (key, value) -> {
-                                if (!(key instanceof String)) {
-                                    throw new IllegalStateException("Extended-state keys must be strings.");
-                                }
-                                variables.put((String) key, value);
-                            }
-                    );
+                .getVariables()
+                .forEach( (key, value) -> {
+                        if (!(key instanceof String)) {
+                            throw new IllegalStateException("Extended-state keys must be strings.");
+                        }
+                        variables.put((String) key, value);
+                    }
+                );
         }
         instanceRepository.saveContext(
-                reference,
-                context.getState(),
-                objectMapper.writeValueAsString(new StoredContext(1, context.getState(), variables))
+            reference,
+            context.getState(),
+            objectMapper.writeValueAsString(new StoredContext(1, context.getState(), variables))
         );
     }
 
@@ -55,22 +55,26 @@ public class JdbcStateMachinePersist implements StateMachinePersist<String, Stri
         return readContext(instanceRepository.findByReference(reference));
     }
 
-    public StateMachineContext<String, String> readContext(
-            Instance instance) throws Exception {
+    public StateMachineContext<String, String> readContext(Instance instance) throws Exception {
 
         if (instance.formatVersion() != 1) {
             throw new IllegalStateException("Unsupported context format.");
         }
 
-        StoredContext saved = instance.context() == null
+        StoredContext contextData = instance.context() == null
                         ? new StoredContext(1, instance.state(), Map.of())
                         : objectMapper.readValue(instance.context(), StoredContext.class);
 
-        if (saved.formatVersion() != 1 || !instance.state().equals(saved.state()))
+        if (contextData.formatVersion() != 1 || !instance.state().equals(contextData.state())) {
             throw new IllegalStateException("Persisted context does not match current_state.");
+        }
 
-        Map<Object, Object> variables = new HashMap<>(saved.variables());
+        Map<Object, Object> variables = new HashMap<>(contextData.variables());
         return new DefaultStateMachineContext<>(
-                saved.state(), null, null, new DefaultExtendedState(variables));
+                contextData.state(),
+                null,
+                null,
+                new DefaultExtendedState(variables)
+        );
     }
 }

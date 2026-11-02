@@ -21,8 +21,8 @@ import java.time.Instant;
 
 @RestControllerAdvice
 public class WorkflowExceptionHandler {
-    public static final String METADATA_ATTRIBUTE =
-            WorkflowExceptionHandler.class.getName() + ".metadata";
+
+    public static final String METADATA_ATTRIBUTE = WorkflowExceptionHandler.class.getName() + ".metadata";
     private static final Logger LOG = LoggerFactory.getLogger(WorkflowExceptionHandler.class);
 
     @ExceptionHandler(Exception.class)

@@ -26,8 +26,8 @@ import com.example.statemachine.dto.api.WorkflowDetails;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
-    public static final String RESPONSE_ATTRIBUTE =
-            WorkflowRequestLoggingFilter.class.getName() + ".response";
+
+    public static final String RESPONSE_ATTRIBUTE = WorkflowRequestLoggingFilter.class.getName() + ".response";
     private static final Logger LOG = LoggerFactory.getLogger(WorkflowRequestLoggingFilter.class);
 
     @Override

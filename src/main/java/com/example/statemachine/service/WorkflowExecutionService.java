@@ -32,8 +32,8 @@ public class WorkflowExecutionService {
     private final JdbcWorkflowDefinitionRepository definitionsRepo;
     private final JdbcWorkflowInstanceRepository workflowInstanceRepository;
     private final StateMachineFactory<String, String> factory;
-    private final StateMachinePersister<String, String, String> persister;
-    private final JdbcStateMachinePersist contextStore;
+    private final StateMachinePersister<String, String, String> stateMachinePersister;
+    private final JdbcStateMachinePersist jdbcStateMachinePersist;
     private final JdbcWorkflowHistoryRepository history;
     private final WorkflowEventProcessor eventProcessor;
 
@@ -41,16 +41,16 @@ public class WorkflowExecutionService {
             JdbcWorkflowDefinitionRepository definitionsRepo,
             JdbcWorkflowInstanceRepository workflowInstanceRepository,
             StateMachineFactory<String, String> factory,
-            StateMachinePersister<String, String, String> persister,
-            JdbcStateMachinePersist contextStore,
+            StateMachinePersister<String, String, String> stateMachinePersister,
+            JdbcStateMachinePersist jdbcStateMachinePersist,
             JdbcWorkflowHistoryRepository history,
             WorkflowEventProcessor eventProcessor) {
 
         this.definitionsRepo = definitionsRepo;
         this.workflowInstanceRepository = workflowInstanceRepository;
         this.factory = factory;
-        this.persister = persister;
-        this.contextStore = contextStore;
+        this.stateMachinePersister = stateMachinePersister;
+        this.jdbcStateMachinePersist = jdbcStateMachinePersist;
         this.history = history;
         this.eventProcessor = eventProcessor;
     }
@@ -58,17 +58,18 @@ public class WorkflowExecutionService {
 
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails createWorkflow(String referenceId, String workflowKey) throws Exception {
+
         String definitionId = definitionsRepo.findLatestActiveDefinitionId(workflowKey);
         WorkflowDefinition workflowDefinition = definitionsRepo.loadWorkflowDefinition(definitionId);
-        StateMachine<String, String> machine = factory.getStateMachine(definitionId);
 
+        StateMachine<String, String> machine = factory.getStateMachine(definitionId);
         try {
 
             machine.startReactively().block();
             eventProcessor.checkMachineError(machine);
 
             workflowInstanceRepository.create(referenceId, definitionId, machine.getState().getId());
-            persister.persist(machine, referenceId);
+            stateMachinePersister.persist(machine, referenceId);
             return buildWorkflowDetails(
                     referenceId,
                     workflowDefinition,
@@ -82,11 +83,11 @@ public class WorkflowExecutionService {
 
     @Transactional(readOnly = true, rollbackFor = Exception.class)
     public WorkflowDetails getWorkflowState(String referenceId) throws Exception {
-        // One row supplies state and context together. No lock, machine startup or actions on
-        // reads.
+
         Instance workflowInstance = workflowInstanceRepository.findByReference(referenceId);
         WorkflowDefinition definition = definitionsRepo.loadWorkflowDefinition(workflowInstance.definitionId());
-        StateMachineContext<String, String> context = contextStore.readContext(workflowInstance);
+
+        StateMachineContext<String, String> context = jdbcStateMachinePersist.readContext(workflowInstance);
         return buildWorkflowDetails(
                 referenceId,
                 definition,
@@ -98,12 +99,13 @@ public class WorkflowExecutionService {
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails submitEvent(RequestMetadata metadata) throws Exception {
 
-        Instance instance = workflowInstanceRepository.lockByReference(metadata.referenceId());
-        WorkflowDefinition definition = definitionsRepo.loadWorkflowDefinition(instance.definitionId());
-        StateMachine<String, String> machine = factory.getStateMachine(instance.definitionId());
+        Instance workflowInstance = workflowInstanceRepository.lockByReference(metadata.referenceId());
+        WorkflowDefinition definition = definitionsRepo.loadWorkflowDefinition(workflowInstance.definitionId());
+
+        StateMachine<String, String> machine = factory.getStateMachine(workflowInstance.definitionId());
 
         try {
-            persister.restore(machine, metadata.referenceId());
+            stateMachinePersister.restore(machine, metadata.referenceId());
             eventProcessor.checkMachineError(machine);
 
             String event = metadata.event();
@@ -131,7 +133,7 @@ public class WorkflowExecutionService {
                 storePendingEvents(machine, Set.of());
             }
 
-            persister.persist(machine, metadata.referenceId());
+            stateMachinePersister.persist(machine, metadata.referenceId());
 
             return buildWorkflowDetails(
                     metadata.referenceId(),

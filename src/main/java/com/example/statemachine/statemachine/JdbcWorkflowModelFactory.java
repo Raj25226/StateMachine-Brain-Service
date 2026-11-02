@@ -25,13 +25,13 @@ import java.util.*;
 @Component
 public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String, String> {
 
-    private final JdbcWorkflowDefinitionRepository definitions;
-    private final WorkflowBehaviorRegistry behaviors;
+    private final JdbcWorkflowDefinitionRepository definitionRepository;
+    private final WorkflowBehaviorRegistry behaviorRegistry;
 
-    public JdbcWorkflowModelFactory(
-            JdbcWorkflowDefinitionRepository definitions, WorkflowBehaviorRegistry behaviors) {
-        this.definitions = definitions;
-        this.behaviors = behaviors;
+    public JdbcWorkflowModelFactory(JdbcWorkflowDefinitionRepository definitionRepository,
+                                    WorkflowBehaviorRegistry behaviorRegistry) {
+        this.definitionRepository = definitionRepository;
+        this.behaviorRegistry = behaviorRegistry;
     }
 
     @Override
@@ -41,7 +41,8 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
     @Override
     public StateMachineModel<String, String> build(String definitionId) {
-        WorkflowDefinition workflowDefinition = definitions.loadWorkflowDefinition(definitionId);
+
+        WorkflowDefinition workflowDefinition = definitionRepository.loadWorkflowDefinition(definitionId);
         validateWorkflowStructure(workflowDefinition);
 
         List<StateData<String, String>> states =
@@ -124,7 +125,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
     private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(String code) {
 
-        Function<StateContext<String, String>, Mono<Void>> action = behaviors.resolveAction(code);
+        Function<StateContext<String, String>, Mono<Void>> action = behaviorRegistry.resolveAction(code);
         return context -> Mono.defer(() -> action.apply(context))
                 .doOnError(
                         error ->
@@ -134,7 +135,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
     }
 
     private Function<StateContext<String, String>, Mono<Boolean>> resolveGuardWithErrorHandling(String code) {
-        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviors.resolveGuard(code);
+        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuard(code);
         return context -> Mono.defer(() -> guard.apply(context))
                 .doOnError( error ->
                         context.getStateMachine()
