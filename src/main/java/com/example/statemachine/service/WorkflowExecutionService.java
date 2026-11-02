@@ -30,7 +30,7 @@ import com.example.statemachine.dto.workflow.EventProcessingResult;
 @Service
 public class WorkflowExecutionService {
     private final JdbcWorkflowDefinitionRepository definitionsRepo;
-    private final JdbcWorkflowInstanceRepository instances;
+    private final JdbcWorkflowInstanceRepository workflowInstanceRepository;
     private final StateMachineFactory<String, String> factory;
     private final StateMachinePersister<String, String, String> persister;
     private final JdbcStateMachinePersist contextStore;
@@ -47,7 +47,7 @@ public class WorkflowExecutionService {
             WorkflowEventProcessor eventProcessor) {
 
         this.definitionsRepo = definitionsRepo;
-        this.instances = workflowInstanceRepository;
+        this.workflowInstanceRepository = workflowInstanceRepository;
         this.factory = factory;
         this.persister = persister;
         this.contextStore = contextStore;
@@ -67,7 +67,7 @@ public class WorkflowExecutionService {
             machine.startReactively().block();
             eventProcessor.checkMachineError(machine);
 
-            instances.create(referenceId, definitionId, machine.getState().getId());
+            workflowInstanceRepository.create(referenceId, definitionId, machine.getState().getId());
             persister.persist(machine, referenceId);
             return buildWorkflowDetails(
                     referenceId,
@@ -84,7 +84,7 @@ public class WorkflowExecutionService {
     public WorkflowDetails getWorkflowState(String referenceId) throws Exception {
         // One row supplies state and context together. No lock, machine startup or actions on
         // reads.
-        Instance workflowInstance = instances.findByReference(referenceId);
+        Instance workflowInstance = workflowInstanceRepository.findByReference(referenceId);
         WorkflowDefinition definition = definitionsRepo.loadWorkflowDefinition(workflowInstance.definitionId());
         StateMachineContext<String, String> context = contextStore.readContext(workflowInstance);
         return buildWorkflowDetails(
@@ -98,7 +98,7 @@ public class WorkflowExecutionService {
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails submitEvent(RequestMetadata metadata) throws Exception {
 
-        Instance instance = instances.lockByReference(metadata.referenceId());
+        Instance instance = workflowInstanceRepository.lockByReference(metadata.referenceId());
         WorkflowDefinition definition = definitionsRepo.loadWorkflowDefinition(instance.definitionId());
         StateMachine<String, String> machine = factory.getStateMachine(instance.definitionId());
 
