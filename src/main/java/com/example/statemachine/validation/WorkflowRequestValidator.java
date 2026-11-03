@@ -16,12 +16,12 @@ public class WorkflowRequestValidator {
 
     public Command validate(JsonNode body) {
         object(body, "request");
-        fields(body, Set.of("metadata", "payload"), "request");
+        validateAllowedFields(body, Set.of("metadata", "payload"), "request");
 
         JsonNode metadata = body.get("metadata");
         object(metadata, "metadata");
 
-        fields(metadata, Set.of("operation", "requestId", "referenceId", "event", "idempotencyKey", "workflowKey"), "metadata");
+        validateAllowedFields(metadata, Set.of("operation", "requestId", "referenceId", "event", "idempotencyKey", "workflowKey"), "metadata");
 
         String name = validateAndGet(metadata, "operation", 32);
         validateAndGet(metadata, "requestId", 128);
@@ -37,21 +37,23 @@ public class WorkflowRequestValidator {
         if (operation == WorkflowOperation.SUBMIT_EVENT)
             validateAndGet(metadata, "event", 100);
         else
-            absent(metadata, "event");
+            rejectField(metadata, "event");
 
         if (operation == WorkflowOperation.CREATE) {
             if (metadata.has("workflowKey"))
                 validateAndGet(metadata, "workflowKey", 100);
-        } else absent(metadata, "workflowKey");
+        } else {
+            rejectField(metadata, "workflowKey");
+        }
 
         if (operation == WorkflowOperation.GET_STATE) {
-            absent(metadata, "idempotencyKey");
+            rejectField(metadata, "idempotencyKey");
         } else {
             validateAndGet(metadata, "idempotencyKey", 128);
         }
 
         object(body.get("payload"), "payload");
-        fields(body.get("payload"), Set.of(), "payload");
+        validateAllowedFields(body.get("payload"), Set.of(), "payload");
 
         RequestMetadata recovered = extractMetadataForErrorResponse(body);
 
@@ -80,7 +82,7 @@ public class WorkflowRequestValidator {
         return value;
     }
 
-    private void absent(JsonNode m, String name) {
+    private void rejectField(JsonNode m, String name) {
         if (m.has(name)) {
             throw WorkflowFailure.invalid("metadata." + name + " is not allowed for this operation.");
         }
@@ -90,7 +92,7 @@ public class WorkflowRequestValidator {
         if (node == null || !node.isObject()) throw WorkflowFailure.invalid(name + " must be a JSON object.");
     }
 
-    private void fields(JsonNode node, Set<String> allowed, String path) {
+    private void validateAllowedFields(JsonNode node, Set<String> allowed, String path) {
         node.propertyNames().forEach(name -> {
             if (!allowed.contains(name)) throw WorkflowFailure.invalid("Unsupported field: " + path + "." + name);
         });

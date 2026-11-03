@@ -116,20 +116,23 @@ public class WorkflowExecutionService {
 
             EventOutcome outcome;
             if (isDeferred(definition, machine.getState().getId(), event)) {
-                LinkedHashSet<String> pending = new LinkedHashSet<>(
-                        pendingEvents(machine.getExtendedState().getVariables()));
+                // Keep this event pending until the workflow can handle it.
+                LinkedHashSet<String> pending = new LinkedHashSet<>( pendingEvents(machine.getExtendedState().getVariables()));
                 pending.add(event);
 
                 storePendingEvents(machine, pending);
                 outcome = EventOutcome.DEFERRED;
 
             } else {
+                // Apply the event and save its transition history.
                 processAndRecordEvent(machine, event, definition.id(), metadata);
                 outcome = EventOutcome.APPLIED;
+                // Process pending events that can run in the new state.
                 processDeferredEvents(machine, definition, metadata);
             }
 
             if (definition.getState(machine.getState().getId()).terminal()) {
+                // Clear pending events when the workflow is complete.
                 storePendingEvents(machine, Set.of());
             }
 

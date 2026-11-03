@@ -36,7 +36,7 @@ public class JdbcWorkflowReplayRepository {
         jdbc.update(sql, params);
     }
 
-    public Replay lock(String key) {
+    public Replay findAndLockByIdempotencyKey(String key) {
         final String sql = """
                 SELECT request_fingerprint, response_json, http_status
                 FROM workflow_brain.workflow_request_replay
