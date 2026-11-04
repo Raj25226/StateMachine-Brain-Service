@@ -78,8 +78,8 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                         workflowTransition.source(),
                         workflowTransition.target(),
                         workflowTransition.event(),
-                        resolveTransitionActions(workflowTransition.actions()),
-                        workflowTransition.guard() == null ? null : resolveGuardWithErrorHandling(workflowTransition.guard()),
+                        resolveTransitionActions(workflowTransition.actionNames()),
+                        workflowTransition.guardName() == null ? null : resolveGuardWithErrorHandling(workflowTransition.guardName()),
                         TransitionKind.valueOf(workflowTransition.kind())
                     )
                 )
@@ -99,7 +99,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                 stateDefinition.actions().stream()
                 .filter(actionBinding -> actionBinding.phase().equals(actionPhase))
                 .sorted(Comparator.comparingInt(WorkflowActionBinding::order))
-                .map(actionBinding -> resolveActionWithErrorHandling(actionBinding.code()))
+                .map(actionBinding -> resolveActionWithErrorHandling(actionBinding.actionName()))
                 .toList();
 
         return orderedActions.isEmpty()
@@ -112,10 +112,10 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
     }
 
     private Collection<Function<StateContext<String, String>, Mono<Void>>> resolveTransitionActions(
-            List<String> actionCodes) {
+            List<String> actionNames) {
 
         List<Function<StateContext<String, String>, Mono<Void>>> orderedActions =
-                actionCodes.stream()
+                actionNames.stream()
                 .map(behaviorCode -> resolveActionWithErrorHandling(behaviorCode))
                 .toList();
 
@@ -130,7 +130,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
     private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(String behaviorCode) {
 
-        Function<StateContext<String, String>, Mono<Void>> actionFunction = behaviorRegistry.resolveAction(behaviorCode);
+        Function<StateContext<String, String>, Mono<Void>> actionFunction = behaviorRegistry.resolveActionByName(behaviorCode);
         return stateContext -> Mono.defer(() -> actionFunction.apply(stateContext))
                 .doOnError(
                         error -> {
@@ -142,7 +142,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
     }
 
     private Function<StateContext<String, String>, Mono<Boolean>> resolveGuardWithErrorHandling(String behaviorCode) {
-        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuard(behaviorCode);
+        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuardByName(behaviorCode);
         return stateContext -> Mono.defer(() -> guard.apply(stateContext))
                 .doOnError(error -> {
                     log.error("workflow_guard_failed guard={}", LogValueSanitizerFunction.SANITIZE.apply(behaviorCode), error);

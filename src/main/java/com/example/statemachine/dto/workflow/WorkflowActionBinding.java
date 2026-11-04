@@ -1,7 +1,8 @@
 package com.example.statemachine.dto.workflow;
 
 public record WorkflowActionBinding(
-        String code,
+        Integer actionId,
+        String actionName,
         String phase,
         int order
 ) {}

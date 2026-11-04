@@ -35,7 +35,7 @@ public class JdbcWorkflowDefinitionRepository {
         final Map<String, ?> parameters = Map.of(DatabaseConstants.PARAM_WORKFLOW_KEY, workflowKey);
 
         final List<Integer> definitionIds = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
-            return resultSet.getInt(DatabaseConstants.COLUMN_DEFINITION_ID);
+            return resultSet.getInt(DatabaseConstants.COLUMN_ID);
         });
 
         if (definitionIds.isEmpty()) {
@@ -97,7 +97,8 @@ public class JdbcWorkflowDefinitionRepository {
             String stateCode = resultSet.getString(DatabaseConstants.COLUMN_STATE_CODE);
             WorkflowActionBinding actionBinding =
                     new WorkflowActionBinding(
-                        resultSet.getString(DatabaseConstants.COLUMN_ACTION_CODE),
+                        resultSet.getInt(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_ACTION),
+                        resultSet.getString(DatabaseConstants.COLUMN_ACTION_NAME),
                         resultSet.getString(DatabaseConstants.COLUMN_PHASE),
                         resultSet.getInt(DatabaseConstants.COLUMN_EXECUTION_ORDER)
                     );
@@ -135,11 +136,11 @@ public class JdbcWorkflowDefinitionRepository {
         Map<Integer, List<String>> actionsByTransition = new HashMap<>();
 
         RowCallbackHandler rowCallbackHandler = resultSet -> {
-            Integer transitionId = resultSet.getInt(DatabaseConstants.COLUMN_TRANSITION_ID);
-            String actionCode = resultSet.getString(DatabaseConstants.COLUMN_ACTION_CODE);
+            Integer transitionId = resultSet.getInt(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_TRANSITION);
+            String actionName = resultSet.getString(DatabaseConstants.COLUMN_ACTION_NAME);
 
-            List<String> actionCodes = actionsByTransition.computeIfAbsent(transitionId, key -> new ArrayList<>());
-            actionCodes.add(actionCode);
+            List<String> actionNames = actionsByTransition.computeIfAbsent(transitionId, key -> new ArrayList<>());
+            actionNames.add(actionName);
         };
 
         jdbcTemplate.query(sql, parameters, rowCallbackHandler);
@@ -151,7 +152,7 @@ public class JdbcWorkflowDefinitionRepository {
         final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS);
 
         List<WorkflowTransitionDefinition> transitionDefinitions = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
-            Integer transitionId = resultSet.getInt(DatabaseConstants.COLUMN_TRANSITION_ID);
+            Integer transitionId = resultSet.getInt(DatabaseConstants.COLUMN_ID);
             List<String> transitionActions = List.copyOf(actionsByTransition.getOrDefault(transitionId, List.of()));
 
             return new WorkflowTransitionDefinition(
@@ -160,7 +161,8 @@ public class JdbcWorkflowDefinitionRepository {
                     resultSet.getString(DatabaseConstants.COLUMN_EVENT_CODE),
                     resultSet.getString(DatabaseConstants.COLUMN_TARGET_STATE),
                     resultSet.getString(DatabaseConstants.COLUMN_TRANSITION_KIND),
-                    resultSet.getString(DatabaseConstants.COLUMN_GUARD_CODE),
+                    resultSet.getObject(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_GUARD, Integer.class),
+                    resultSet.getString(DatabaseConstants.COLUMN_GUARD_NAME),
                     transitionActions
             );
         });

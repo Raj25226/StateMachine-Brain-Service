@@ -28,7 +28,7 @@ class WorkflowCommandServiceGsonTest {
         JdbcWorkflowIdempotencyRepository repository = new JdbcWorkflowIdempotencyRepository(null) {
             @Override
             public WorkflowIdempotencyRecord findAndLockByIdempotencyKey(String key) {
-                return new WorkflowIdempotencyRecord("fingerprint", savedResponse, 201);
+                return new WorkflowIdempotencyRecord(1, "fingerprint", savedResponse, 201);
             }
         };
         Gson gson = new GsonConfiguration().gson();

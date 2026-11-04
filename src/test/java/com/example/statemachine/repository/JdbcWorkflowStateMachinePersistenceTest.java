@@ -64,7 +64,7 @@ class JdbcWorkflowStateMachinePersistenceTest {
     }
 
     private WorkflowInstance instance(String contextJson, int version) {
-        return new WorkflowInstance("APP-101", 1, "PROFILE_DETAILS", contextJson, version);
+        return new WorkflowInstance(1, "APP-101", 1, "PROFILE_DETAILS", contextJson, version);
     }
 
     private static class CapturingInstanceRepository extends JdbcWorkflowInstanceRepository {

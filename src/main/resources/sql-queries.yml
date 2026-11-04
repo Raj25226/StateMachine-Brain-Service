@@ -1,8 +1,8 @@
-# Runtime JDBC queries. Named parameters match DatabaseConstants and repository bindings.
+# Runtime JDBC queries. All entity primary keys are id; foreign keys use fk_id_<entity>.
 
 workflow-definition:
   find-latest-active-id: |
-    SELECT definition_id
+    SELECT id
     FROM workflow_brain.workflow_definition
     WHERE workflow_key = :workflowKey AND status = 'ACTIVE'
     ORDER BY version DESC
@@ -10,39 +10,53 @@ workflow-definition:
   find-metadata: |
     SELECT workflow_key, version
     FROM workflow_brain.workflow_definition
-    WHERE definition_id = :definitionId
+    WHERE id = :definitionId
   find-state-actions: |
-    SELECT state_code, action_code, phase, execution_order
-    FROM workflow_brain.workflow_state_action
-    WHERE definition_id = :definitionId
-    ORDER BY state_code, phase, execution_order
+    SELECT state.state_code, state_action.fk_id_workflow_action, action.action_name, state_action.phase, state_action.execution_order
+    FROM workflow_brain.workflow_state_action state_action
+    JOIN workflow_brain.workflow_state state ON state.id = state_action.fk_id_workflow_state
+    JOIN workflow_brain.workflow_action action ON action.id = state_action.fk_id_workflow_action
+    WHERE state.fk_id_workflow_definition = :definitionId
+    ORDER BY state.state_code, state_action.phase, state_action.execution_order
   find-states: |
     SELECT state_code, initial_state, terminal_state
     FROM workflow_brain.workflow_state
-    WHERE definition_id = :definitionId
+    WHERE fk_id_workflow_definition = :definitionId
     ORDER BY state_code
   find-transition-actions: |
-    SELECT transition_action.transition_id, transition_action.action_code
+    SELECT transition_action.fk_id_workflow_transition, action.action_name
     FROM workflow_brain.workflow_transition_action transition_action
-    inner join workflow_brain.workflow_transition workflow_transition ON workflow_transition.transition_id = transition_action.transition_id
-    WHERE workflow_transition.definition_id = :definitionId
-    ORDER BY transition_action.transition_id, transition_action.execution_order
+    JOIN workflow_brain.workflow_transition transition ON transition.id = transition_action.fk_id_workflow_transition
+    JOIN workflow_brain.workflow_action action ON action.id = transition_action.fk_id_workflow_action
+    WHERE transition.fk_id_workflow_definition = :definitionId
+    ORDER BY transition_action.fk_id_workflow_transition, transition_action.execution_order
   find-transitions: |
-    SELECT transition_id, source_state, event_code, target_state, transition_kind, guard_code
-    FROM workflow_brain.workflow_transition
-    WHERE definition_id = :definitionId
-    ORDER BY transition_id
+    SELECT transition.id, source_state.state_code AS source_state, transition.event_code,
+           target_state.state_code AS target_state, transition.transition_kind, transition.fk_id_workflow_guard, guard.guard_name
+    FROM workflow_brain.workflow_transition transition
+    JOIN workflow_brain.workflow_state source_state ON source_state.id = transition.fk_id_source_workflow_state
+    JOIN workflow_brain.workflow_state target_state ON target_state.id = transition.fk_id_target_workflow_state
+    LEFT JOIN workflow_brain.workflow_guard guard ON guard.id = transition.fk_id_workflow_guard
+    WHERE transition.fk_id_workflow_definition = :definitionId
+    ORDER BY transition.id
   find-deferred-events: |
-    SELECT state_code, event_code
-    FROM workflow_brain.workflow_deferred_event
-    WHERE definition_id = :definitionId
-    ORDER BY state_code, event_code
+    SELECT state.state_code, deferred.event_code
+    FROM workflow_brain.workflow_deferred_event deferred
+    JOIN workflow_brain.workflow_state state ON state.id = deferred.fk_id_workflow_state
+    WHERE state.fk_id_workflow_definition = :definitionId
+    ORDER BY state.state_code, deferred.event_code
 
 transition-history:
   insert: |
     INSERT INTO workflow_brain.workflow_transition_history
-    (reference_id, definition_id, source_state, event_code, target_state, request_id, idempotency_key)
-    VALUES (:referenceId, :definitionId, :sourceState, :event, :targetState, :requestId, :idempotencyKey)
+    (event_code, request_id, idempotency_key, fk_id_workflow_instance, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state)
+    SELECT :event, :requestId, :idempotencyKey, instance.id, :definitionId, source_state.id, target_state.id
+    FROM workflow_brain.workflow_instances instance
+    JOIN workflow_brain.workflow_state source_state
+        ON source_state.fk_id_workflow_definition = instance.fk_id_workflow_definition AND source_state.state_code = :sourceState
+    JOIN workflow_brain.workflow_state target_state
+        ON target_state.fk_id_workflow_definition = instance.fk_id_workflow_definition AND target_state.state_code = :targetState
+    WHERE instance.reference_id = :referenceId AND instance.fk_id_workflow_definition = :definitionId
 
 idempotency:
   exists-by-key: |
@@ -53,7 +67,7 @@ idempotency:
     INSERT INTO workflow_brain.workflow_request_replay (idempotency_key, request_fingerprint)
     VALUES (:key, :fingerprint)
   find-and-lock-by-key: |
-    SELECT request_fingerprint, response_json, http_status
+    SELECT id, request_fingerprint, response_json, http_status
     FROM workflow_brain.workflow_request_replay
     WHERE idempotency_key = :key FOR UPDATE
   save-successful-response: |
@@ -62,15 +76,26 @@ idempotency:
 
 workflow-instance:
   insert: |
-    INSERT INTO workflow_brain.workflow_instances (reference_id, definition_id, current_state)
-    VALUES (:reference, :definition, :state)
+    INSERT INTO workflow_brain.workflow_instances (reference_id, fk_id_workflow_definition, fk_id_workflow_state)
+    SELECT :reference, :definition, state.id
+    FROM workflow_brain.workflow_state state
+    WHERE state.fk_id_workflow_definition = :definition AND state.state_code = :state
   find-and-lock-by-reference: |
-    SELECT reference_id, definition_id, current_state, machine_context, context_format_version
-    FROM workflow_brain.workflow_instances WHERE reference_id = :reference
-    FOR UPDATE
+    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state,
+           instance.machine_context, instance.context_format_version
+    FROM workflow_brain.workflow_instances instance
+    JOIN workflow_brain.workflow_state state ON state.id = instance.fk_id_workflow_state
+    WHERE instance.reference_id = :reference
+    FOR UPDATE OF instance
   find-by-reference: |
-    SELECT reference_id, definition_id, current_state, machine_context, context_format_version
-    FROM workflow_brain.workflow_instances WHERE reference_id = :reference
+    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state,
+           instance.machine_context, instance.context_format_version
+    FROM workflow_brain.workflow_instances instance
+    JOIN workflow_brain.workflow_state state ON state.id = instance.fk_id_workflow_state
+    WHERE instance.reference_id = :reference
   update-context: |
-    UPDATE workflow_brain.workflow_instances SET current_state = :state, machine_context = :context,
-    context_format_version = 1, updated_at = CURRENT_TIMESTAMP WHERE reference_id = :reference
+    UPDATE workflow_brain.workflow_instances instance
+    SET fk_id_workflow_state = state.id, machine_context = :context, context_format_version = 1, updated_at = CURRENT_TIMESTAMP
+    FROM workflow_brain.workflow_state state
+    WHERE instance.reference_id = :reference
+      AND state.fk_id_workflow_definition = instance.fk_id_workflow_definition AND state.state_code = :state

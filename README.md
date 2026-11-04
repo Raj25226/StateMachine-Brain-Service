@@ -91,8 +91,14 @@ Operation names and workflow/event codes are case sensitive. Required strings
 must be nonblank. `requestId` is a caller-supplied correlation token;
 `idempotencyKey` identifies one logical mutation. Neither requires a UUID format.
 
-`referenceId` identifies one workflow instance. PAN, mobile and email format
-validation is intentionally pending; currently only a nonblank value is required.
+`referenceId` must be globally unique across workflow instances, including different
+workflow definitions and versions. The database enforces this through
+`workflow_instances.reference_id VARCHAR(100) NOT NULL UNIQUE`. A new CREATE using
+an existing reference returns `409 WORKFLOW_ALREADY_EXISTS`; an identical retry
+with the original idempotency key replays its saved result.
+
+PAN, mobile and email format validation is intentionally pending; currently only
+a nonblank value is required by request validation.
 Workflow keys and event codes are validated against database definitions. Event
 execution also checks the current state and guards.
 
@@ -244,11 +250,18 @@ All application tables and `flyway_schema_history` use the `workflow_brain` sche
 | [V1__create_workflow_schema.sql](src/main/resources/db/migration/V1__create_workflow_schema.sql) | Tables, constraints, identity columns and indexes |
 | [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Onboarding definition, states, transitions, actions, guard and bindings |
 
-Definition, transition and history IDs are PostgreSQL `INTEGER` identity columns.
-Java entity IDs use `Integer`. Business references, request IDs, idempotency keys
-and workflow/state/event/action/guard codes remain strings. Definition IDs become
-strings only at the Spring StateMachine factory boundary, where the framework
-requires them.
+Every application table has an `id INTEGER` identity primary key, represented by
+Integer in Java. All foreign-key columns use `fk_id_<full_entity_name>`, for example
+`fk_id_workflow_definition`, `fk_id_workflow_state`, `fk_id_workflow_action`, `fk_id_workflow_guard`, `fk_id_workflow_transition`
+and `fk_id_workflow_instance`. Source/target relationships use `fk_id_source_workflow_state` and
+`fk_id_target_workflow_state`. Foreign-key columns appear after all business
+columns and timestamps in each table, followed by table-level constraints.
+
+Business references, request IDs, idempotency keys and workflow/state/event codes
+remain strings. Actions and guards store their Java registry names in `action_name`
+and `guard_name`; related rows store their integer IDs. Runtime joins resolve
+these names and the readable state codes. Definition IDs become strings only at
+the Spring StateMachine factory boundary, where the framework requires them.
 
 The schema has 11 application tables: workflow definitions, states, transitions,
 actions, guards, state-action bindings, transition-action bindings, deferred events,

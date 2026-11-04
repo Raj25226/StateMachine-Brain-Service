@@ -25,7 +25,10 @@ public class JdbcWorkflowInstanceRepository {
         final String sql =   SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE);
         Map<String,Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId, DatabaseConstants.PARAM_DEFINITION, definitionId, DatabaseConstants.PARAM_STATE, currentState);
 
-        jdbcTemplate.update(sql, parameters);
+        int insertedRowCount = jdbcTemplate.update(sql, parameters);
+        if (insertedRowCount != 1) {
+            throw new IllegalStateException("Initial workflow state was not found for the definition.");
+        }
     }
 
     public WorkflowInstance findByReferenceId(String referenceId) {
@@ -44,8 +47,9 @@ public class JdbcWorkflowInstanceRepository {
 
         return jdbcTemplate.query( sql, parameters, (resultSet, rowNumber) ->
                                     new WorkflowInstance(
+                                        resultSet.getInt(DatabaseConstants.COLUMN_ID),
                                         resultSet.getString(DatabaseConstants.COLUMN_REFERENCE_ID),
-                                        resultSet.getInt(DatabaseConstants.COLUMN_DEFINITION_ID),
+                                        resultSet.getInt(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_DEFINITION),
                                         resultSet.getString(DatabaseConstants.COLUMN_CURRENT_STATE),
                                         resultSet.getString(DatabaseConstants.COLUMN_MACHINE_CONTEXT),
                                         resultSet.getInt(DatabaseConstants.COLUMN_CONTEXT_FORMAT_VERSION)

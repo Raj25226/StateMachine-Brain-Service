@@ -53,25 +53,25 @@ public class WorkflowBehaviorRegistry {
     private final Map<String, Function<StateContext<String, String>, Mono<Boolean>>> guards =
             Map.of(WorkflowBehaviorConstants.ALWAYS_ALLOW, stateContext -> Mono.just(true));
 
-    public Function<StateContext<String, String>, Mono<Void>> resolveAction(String actionCode) {
+    public Function<StateContext<String, String>, Mono<Void>> resolveActionByName(String actionName) {
 
         Function<StateContext<String, String>, Mono<Void>> action =
-                actions.get(actionCode);
+                actions.get(actionName);
 
         if (action == null) {
-            throw new IllegalStateException("Unregistered workflow action: " + actionCode);
+            throw new IllegalStateException("Unregistered workflow action: " + actionName);
         }
 
         return action;
     }
 
-    public Function<StateContext<String, String>, Mono<Boolean>> resolveGuard(String guardCode) {
+    public Function<StateContext<String, String>, Mono<Boolean>> resolveGuardByName(String guardName) {
 
         Function<StateContext<String, String>, Mono<Boolean>> guard =
-                guards.get(guardCode);
+                guards.get(guardName);
 
         if (guard == null) {
-            throw new IllegalStateException("Unregistered workflow guard: " + guardCode);
+            throw new IllegalStateException("Unregistered workflow guard: " + guardName);
         }
         return guard;
     }

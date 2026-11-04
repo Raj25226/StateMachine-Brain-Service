@@ -34,6 +34,9 @@ public class JdbcWorkflowHistoryRepository {
         final String sql =
                 SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY);
 
-        jdbcTemplate.update(sql, parameters);
+        int insertedRowCount = jdbcTemplate.update(sql, parameters);
+        if (insertedRowCount != 1) {
+            throw new IllegalStateException("Workflow instance or transition states were not found while recording history.");
+        }
     }
 }

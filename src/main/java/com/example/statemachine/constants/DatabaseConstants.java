@@ -4,13 +4,16 @@ package com.example.statemachine.constants;
 public final class DatabaseConstants {
     private DatabaseConstants() { }
 
-    public static final String COLUMN_ACTION_CODE = "action_code";
+    public static final String COLUMN_ID = "id";
+    public static final String COLUMN_FK_ID_WORKFLOW_ACTION = "fk_id_workflow_action";
+    public static final String COLUMN_ACTION_NAME = "action_name";
     public static final String COLUMN_CONTEXT_FORMAT_VERSION = "context_format_version";
     public static final String COLUMN_CURRENT_STATE = "current_state";
-    public static final String COLUMN_DEFINITION_ID = "definition_id";
+    public static final String COLUMN_FK_ID_WORKFLOW_DEFINITION = "fk_id_workflow_definition";
     public static final String COLUMN_EVENT_CODE = "event_code";
     public static final String COLUMN_EXECUTION_ORDER = "execution_order";
-    public static final String COLUMN_GUARD_CODE = "guard_code";
+    public static final String COLUMN_FK_ID_WORKFLOW_GUARD = "fk_id_workflow_guard";
+    public static final String COLUMN_GUARD_NAME = "guard_name";
     public static final String COLUMN_HTTP_STATUS = "http_status";
     public static final String COLUMN_INITIAL_STATE = "initial_state";
     public static final String COLUMN_MACHINE_CONTEXT = "machine_context";
@@ -22,7 +25,7 @@ public final class DatabaseConstants {
     public static final String COLUMN_STATE_CODE = "state_code";
     public static final String COLUMN_TARGET_STATE = "target_state";
     public static final String COLUMN_TERMINAL_STATE = "terminal_state";
-    public static final String COLUMN_TRANSITION_ID = "transition_id";
+    public static final String COLUMN_FK_ID_WORKFLOW_TRANSITION = "fk_id_workflow_transition";
     public static final String COLUMN_TRANSITION_KIND = "transition_kind";
     public static final String COLUMN_VERSION = "version";
     public static final String COLUMN_WORKFLOW_KEY = "workflow_key";

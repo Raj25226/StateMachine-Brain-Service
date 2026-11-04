@@ -37,6 +37,7 @@ public class JdbcWorkflowIdempotencyRepository {
 
         return jdbcTemplate.queryForObject(sql, parameters, (resultSet, rowNumber) ->
                 new WorkflowIdempotencyRecord(
+                        resultSet.getInt(DatabaseConstants.COLUMN_ID),
                         resultSet.getString(DatabaseConstants.COLUMN_REQUEST_FINGERPRINT),
                         resultSet.getString(DatabaseConstants.COLUMN_RESPONSE_JSON),
                         (Integer) resultSet.getObject(DatabaseConstants.COLUMN_HTTP_STATUS)

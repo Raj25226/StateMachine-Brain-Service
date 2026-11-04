@@ -15,30 +15,30 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SqlQueryFunctionTest {
-    // Fingerprints captured from the original inline SQL, ignoring formatting whitespace.
+    // Approved query fingerprints, ignoring formatting whitespace.
     static Stream<Arguments> originalQueryFingerprints() {
         return Stream.of(
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID, "d5fb872fc923c2c49daea20e174e30492d43298a5d9eeab3b1c89331dd833a86"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFINITION_METADATA, "65f56b81f23344d4a9ad1ae71d7a7412b78826438bb5f9a99335ff548381ea51"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATE_ACTIONS, "b622971cbef136128d197698c8883911a8a0220d7085a7ed01cd0f107b5d93f4"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATES, "26ec9ae6c8fb23699ebe0b6b56107f5a89bce1cc5b663af8572fefb426fafcd8"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITION_ACTIONS, "eae49fcdb0d98c2ac97c468875447aba9b3253e53c66e61d86ac74fb847892d4"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS, "305e7aaedd94ad39072ba2d0af0db09c1324b1ba17cd9d50ba5c78818fcfca8b"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFERRED_EVENTS, "6fc143d2a15525c23704c49fa1d8fafaeab6b641d98378a03d7d89342c15e89a"),
-                Arguments.of(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY, "11a9682e3f84ccd2cf2cfd952b09f60faabde0b919a007f7aff26687f7339546"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID, "2a92bf3c787585241929c31eb7cd9381a60dcce67c36523dc8bd7c1639637536"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFINITION_METADATA, "1becffd77b2f5e1f4cad7398b5b7a135ef66d9e8b35bf427998678e35713f8c6"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATE_ACTIONS, "aac932674a412aef3efb5a7f35f9517977b0227e25ba6e9ee4684680632bdd70"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATES, "cf6189f9eb1f7aecd9e79f4d113ca11b356d9fbd828d23550192692771957291"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITION_ACTIONS, "0d5263001d67e625ab818c0c0a95095287e7cf731f0f643521189cf438a215f7"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS, "cf9be2f21f857d16a07f696b9dd2e80f370d83d029223187d2439857424e4100"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFERRED_EVENTS, "99f92e394f100eb11a3eb4a23b4cbc02cc98943f382f3cdfe1fb0cebe0727046"),
+                Arguments.of(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY, "a61209c75c5cfeb6c0419d7554fa1bfb431e31c819970b0280dc59b6da6beebc"),
                 Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.EXISTS_BY_IDEMPOTENCY_KEY, "e6e0fb16e95dac538e4919e1f6bccb9c6ad59299f95a0ec09c0323b940150002"),
                 Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.RESERVE_IDEMPOTENCY_KEY, "ffe4ed8d819c8ae70a9642c89e2165cf6cac8a6c5d915e07a6477a4721c48550"),
-                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.FIND_AND_LOCK_IDEMPOTENCY_RECORD, "1c441321d52c5aba0516cc9c7f03ccd9aa4388f5e75e30520b896857d64ba5b9"),
+                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.FIND_AND_LOCK_IDEMPOTENCY_RECORD, "c629c5c186615e43f0e4abb328ffed47e2d44f2bb8f919b8a120b9b8695dca01"),
                 Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.SAVE_SUCCESSFUL_RESPONSE, "862dc84f3dc417ae277a11c950ca2fa02273203a4fdfcbdb87a3db3a67b1cb86"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE, "132adeb976f02c580c6b6c9208503e0e4439ac20e09e43fbe8f72423c21ada2b"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE, "e90b46b409c0b0493000e57cd060690b8dac2491ab4ab516388df3b3c4ce3d99"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE, "84321ad848beff3f0ab222cbdd42e04d5831149a5957ae1c6ca65434fde24168"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_WORKFLOW_CONTEXT, "25640c92ea094f744d243b0920e24f6a5e764ce745ddd13652d1ffb8a8ce6a4e"));
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE, "95b900a8422f544812c2ea7961ac4739f28b44f50a990f57b0d1180fd471b05d"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE, "d6cac33cea63f41d0edfb3454dac11c0ce8750189f337f3cb40d63c24a701e4d"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE, "3f03a43161eb83172631905dd04dbcc9fcf89a4902ddd1f22bace7683c1f9121"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_WORKFLOW_CONTEXT, "71827d0130e4dde1e0e2702d13e721ec07c17e5969e49d8a73aa791dea9643ac"));
     }
 
     @ParameterizedTest
     @MethodSource("originalQueryFingerprints")
-    void resourceQueryPreservesOriginalSql(String parent, String querySuffix, String expectedFingerprint) throws Exception {
+    void resourceQueryMatchesApprovedSql(String parent, String querySuffix, String expectedFingerprint) throws Exception {
         String query = SqlQueryFunction.GET_QUERY.apply(parent, querySuffix).replaceAll("\\s+", " ").strip();
         byte[] fingerprint = MessageDigest.getInstance(WorkflowConstants.FINGERPRINT_ALGORITHM)
                 .digest(query.getBytes(StandardCharsets.UTF_8));
