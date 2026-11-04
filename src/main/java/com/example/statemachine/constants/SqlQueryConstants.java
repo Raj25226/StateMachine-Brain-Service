@@ -8,7 +8,6 @@ public final class SqlQueryConstants {
 
     public static final String WORKFLOW_DEFINITION_PARENT = "workflow-definition";
     public static final String TRANSITION_HISTORY_PARENT = "transition-history";
-    public static final String IDEMPOTENCY_PARENT = "idempotency";
     public static final String WORKFLOW_INSTANCE_PARENT = "workflow-instance";
 
     public static final String FIND_LATEST_ACTIVE_DEFINITION_ID = ".find-latest-active-id";
@@ -18,10 +17,6 @@ public final class SqlQueryConstants {
     public static final String FIND_TRANSITION_ACTIONS = ".find-transition-actions";
     public static final String FIND_TRANSITIONS = ".find-transitions";
     public static final String INSERT_TRANSITION_HISTORY = ".insert";
-    public static final String EXISTS_BY_IDEMPOTENCY_KEY = ".exists-by-key";
-    public static final String RESERVE_IDEMPOTENCY_KEY = ".reserve-key";
-    public static final String FIND_AND_LOCK_IDEMPOTENCY_RECORD = ".find-and-lock-by-key";
-    public static final String SAVE_SUCCESSFUL_RESPONSE = ".save-successful-response";
     public static final String INSERT_WORKFLOW_INSTANCE = ".insert";
     public static final String FIND_AND_LOCK_WORKFLOW_INSTANCE = ".find-and-lock-by-reference";
     public static final String FIND_WORKFLOW_INSTANCE = ".find-by-reference";

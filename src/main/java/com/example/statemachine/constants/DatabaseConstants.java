@@ -12,13 +12,10 @@ public final class DatabaseConstants {
     public static final String COLUMN_FK_ID_WORKFLOW_DEFINITION = "fk_id_workflow_definition";
     public static final String COLUMN_EVENT_CODE = "event_code";
     public static final String COLUMN_EXECUTION_ORDER = "execution_order";
-    public static final String COLUMN_HTTP_STATUS = "http_status";
     public static final String COLUMN_INITIAL_STATE = "initial_state";
     public static final String COLUMN_MACHINE_CONTEXT = "machine_context";
     public static final String COLUMN_PHASE = "phase";
     public static final String COLUMN_REFERENCE_ID = "reference_id";
-    public static final String COLUMN_REQUEST_FINGERPRINT = "request_fingerprint";
-    public static final String COLUMN_RESPONSE_JSON = "response_json";
     public static final String COLUMN_SOURCE_STATE = "source_state";
     public static final String COLUMN_STATE_CODE = "state_code";
     public static final String COLUMN_TARGET_STATE = "target_state";
@@ -31,16 +28,12 @@ public final class DatabaseConstants {
     public static final String PARAM_DEFINITION = "definition";
     public static final String PARAM_DEFINITION_ID = "definitionId";
     public static final String PARAM_EVENT = "event";
-    public static final String PARAM_FINGERPRINT = "fingerprint";
     public static final String PARAM_IDEMPOTENCY_KEY = "idempotencyKey";
-    public static final String PARAM_KEY = "key";
     public static final String PARAM_REFERENCE = "reference";
     public static final String PARAM_REFERENCE_ID = "referenceId";
     public static final String PARAM_REQUEST_ID = "requestId";
-    public static final String PARAM_RESPONSE = "response";
     public static final String PARAM_SOURCE_STATE = "sourceState";
     public static final String PARAM_STATE = "state";
-    public static final String PARAM_STATUS = "status";
     public static final String PARAM_TARGET_STATE = "targetState";
     public static final String PARAM_WORKFLOW_KEY = "workflowKey";
 }

@@ -69,18 +69,6 @@ CREATE TABLE workflow_brain.workflow_instances (
     FOREIGN KEY (fk_id_workflow_definition, fk_id_workflow_state) REFERENCES workflow_brain.workflow_state(fk_id_workflow_definition, id)
 );
 
-CREATE TABLE workflow_brain.workflow_request_replay (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    idempotency_key VARCHAR(128) NOT NULL UNIQUE,
-    request_fingerprint VARCHAR(64) NOT NULL,
-    response_json TEXT,
-    http_status INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    CHECK ((response_json IS NULL AND http_status IS NULL AND completed_at IS NULL)
-        OR (response_json IS NOT NULL AND http_status BETWEEN 200 AND 299 AND completed_at IS NOT NULL))
-);
-
 CREATE TABLE workflow_brain.workflow_transition_history (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_code VARCHAR(100) NOT NULL,

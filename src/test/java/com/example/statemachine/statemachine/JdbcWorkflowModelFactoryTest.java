@@ -1,18 +1,18 @@
 package com.example.statemachine.statemachine;
 
-import com.example.statemachine.dto.workflow.WorkflowDefinition;
+import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.dto.workflow.WorkflowActionBinding;
+import com.example.statemachine.dto.workflow.WorkflowDefinition;
 import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
 import com.example.statemachine.dto.workflow.WorkflowTransitionDefinition;
+import com.example.statemachine.enums.WorkflowEventProcessingOutcome;
 import com.example.statemachine.repository.JdbcWorkflowDefinitionRepository;
+import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import com.example.statemachine.config.GsonConfiguration;
-import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
-import com.example.statemachine.enums.WorkflowEventProcessingOutcome;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.statemachine.config.StateMachineFactory;
 import org.springframework.statemachine.StateMachine;
+import org.springframework.statemachine.config.StateMachineFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
