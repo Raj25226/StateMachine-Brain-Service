@@ -1,11 +1,11 @@
 # State Machine Brain
 
-A database-configured onboarding workflow using Spring Boot 4.1.1, Spring
-StateMachine 4.0.2, NamedParameterJdbcTemplate, Flyway and PostgreSQL. No JPA.
+A database-configured workflow service for onboarding. Built with Java 25,
+Spring Boot 4.1.1, Spring StateMachine 4.0.2, PostgreSQL, Flyway, JDBC and Gson.
+Persistence uses `NamedParameterJdbcTemplate`; there is no JPA.
 
-The consuming service performs OTP verification, profile collection and document
-uploads. It then submits the corresponding completed business event to this API.
-This application coordinates progress; it does not verify OTPs or upload files.
+The consuming service verifies OTPs, saves profiles and uploads documents. It
+then reports completed business events to this service, which tracks progress.
 
 ```text
 OTP_VERIFICATION --OTP_VERIFIED--> PROFILE_DETAILS
@@ -16,62 +16,92 @@ UDYAM_DOCUMENT_UPLOAD --UDYAM_DOCUMENT_UPLOADED--> COMPLETED
 
 ## Run locally
 
-Requires Java 25+ (Java 25 is the recommended runtime), Maven 3.9+ and PostgreSQL.
-The optional Docker Compose file starts a dedicated development database on 55433,
-so it does not use a PostgreSQL service already listening on 5432. Its credentials
-are local development values only.
+Install Java 25+, Maven 3.9+ and PostgreSQL. Create a database named `workflow`
+and give the database account permission to create the `workflow_brain` schema
+and its tables. Flyway creates the schema, application tables and seed data when
+the application starts.
 
-```powershell
-docker compose -f compose.dev.yaml up -d --wait
-$env:DB_URL = 'jdbc:postgresql://127.0.0.1:55433/workflow_brain'
-$env:DB_USERNAME = 'workflow'
-$env:DB_PASSWORD = 'workflow'
+For macOS/Linux:
+
+```sh
+export DB_URL='jdbc:postgresql://localhost:5432/workflow'
+export DB_USERNAME='admin'
+export DB_PASSWORD='admin'
+export SERVER_PORT='8081'
 mvn spring-boot:run
 ```
 
-If Maven/Java are not on PATH, configure JAVA_HOME and use your installed Maven's
-full path. The server defaults to port 8080; set SERVER_PORT to change it.
+The values above match the local defaults in
+[application.yml](src/main/resources/application.yml). Change them for your
+PostgreSQL installation. `workflow` is the database name; `workflow_brain` is the
+schema inside that database.
 
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- OpenAPI JSON: http://localhost:8080/v3/api-docs
-- OpenAPI YAML: http://localhost:8080/v3/api-docs.yaml
+| Environment variable | Default |
+| --- | --- |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/workflow` |
+| `DB_USERNAME` | `admin` |
+| `DB_PASSWORD` | `admin` |
+| `SERVER_PORT` | `8081` |
 
-Stop a foreground app with Ctrl+C. Stop only this project's development database
-with `docker compose -f compose.dev.yaml stop`. The database volume is retained.
+The repository does not include a Docker Compose file or Maven wrapper.
+Check `java -version` and `mvn -version` if Maven uses a different JDK.
 
-## One business endpoint
+With the default port:
 
-All commands use **POST /api/workflows** and `Content-Type: application/json`.
-Swagger/documentation routes are separate from the business endpoint.
+- [Swagger UI](http://localhost:8081/swagger-ui.html)
+- [OpenAPI JSON](http://localhost:8081/v3/api-docs)
+- [OpenAPI YAML](http://localhost:8081/v3/api-docs.yaml)
 
-A shared Gson bean handles workflow HTTP envelopes, saved machine contexts and
-idempotent responses. Custom adapters preserve strict request validation, ISO-8601
-timestamps, optional response-field omission and required error payload=null.
-The fingerprint function also uses Gson while preserving existing fingerprint bytes.
+## Build and test
 
-Every request contains exactly `metadata` and `payload`. Both must be JSON
-objects. Payload is currently `{}` for every operation. Unknown fields, duplicate
-JSON keys, trailing JSON, nulls and inappropriate fields are rejected.
+```sh
+mvn clean package
+java -jar target/state-machine-brain-0.0.1-SNAPSHOT.jar
+```
 
-| Operation | Required metadata | Optional metadata | Success |
-| --- | --- | --- | --- |
-| CREATE | operation, requestId, referenceId, idempotencyKey | workflowKey (default onboarding) | 201 |
-| GET_STATE | operation, requestId, referenceId | None | 200 |
-| SUBMIT_EVENT | operation, requestId, referenceId, event, idempotencyKey | — | 200 |
+Configure the database environment variables before running the JAR. To run only
+the automated tests:
 
-Names are case sensitive. Supported operations are CREATE, GET_STATE and
-SUBMIT_EVENT. Required fields must be nonblank strings. requestId and
-idempotencyKey are opaque caller-supplied tokens. referenceId identifies one
-workflow instance; PAN, mobile and email format validation is intentionally
-pending. Event codes and workflow keys are checked against database definitions.
-Error-response metadata extraction copies caller values without validation.
+```sh
+mvn test
+```
 
-Request validation does not impose string-length rules. Database storage still
-limits referenceId/workflowKey/event to 100 characters and requestId/idempotencyKey
-to 128 where persisted. These storage constraints must be revisited when defining
-reference formats; oversized persisted values currently result in a database error.
+Tests cover request binding and validation, Swagger examples, exception routing,
+Gson serialization, saved-response replay, fingerprint compatibility, SQL catalog
+lookups and the integer definition-ID boundary. Full workflow transaction and
+concurrency tests against PostgreSQL are not part of the automated suite.
 
-### Create
+## API contract
+
+All business operations use **POST `/api/workflows`** with
+`Content-Type: application/json`.
+
+Each request contains exactly two objects: `metadata` and `payload`. The current
+payload must be `{}`. Unknown fields, duplicate JSON properties, trailing JSON,
+non-string metadata, explicit null metadata fields and fields forbidden for the
+selected operation return `400 INVALID_REQUEST`.
+
+| Operation | Required metadata | Optional metadata | Forbidden metadata | Success |
+| --- | --- | --- | --- | --- |
+| `CREATE` | operation, requestId, referenceId, idempotencyKey | workflowKey; defaults to `onboarding` | event | 201 |
+| `GET_STATE` | operation, requestId, referenceId | None | event, workflowKey, idempotencyKey | 200 |
+| `SUBMIT_EVENT` | operation, requestId, referenceId, event, idempotencyKey | None | workflowKey | 200 |
+
+Operation names and workflow/event codes are case sensitive. Required strings
+must be nonblank. `requestId` is a caller-supplied correlation token;
+`idempotencyKey` identifies one logical mutation. Neither requires a UUID format.
+
+`referenceId` identifies one workflow instance. PAN, mobile and email format
+validation is intentionally pending; currently only a nonblank value is required.
+Workflow keys and event codes are validated against database definitions. Event
+execution also checks the current state and guards.
+
+Request validation does not impose string-length limits. Database columns still
+limit references, workflow keys and event codes to 100 characters, and persisted
+request IDs and idempotency keys to 128. Oversized stored values currently cause
+a database error. Revisit these constraints when reference formats are defined.
+
+### Create a workflow
 
 ```json
 {
@@ -86,7 +116,10 @@ reference formats; oversized persisted values currently result in a database err
 }
 ```
 
-### Submit a completed business event
+Creates an instance using the highest `ACTIVE` version of the workflow. Seeded
+onboarding starts at `OTP_VERIFICATION`. A reference can have only one instance.
+
+### Submit a completed event
 
 ```json
 {
@@ -101,7 +134,7 @@ reference formats; oversized persisted values currently result in a database err
 }
 ```
 
-Example response (processedAt varies):
+Example response:
 
 ```json
 {
@@ -113,7 +146,7 @@ Example response (processedAt varies):
     "idempotencyKey": "APP-101-otp",
     "workflowKey": "onboarding",
     "status": "SUCCESS",
-    "processedAt": "2026-10-22T12:00:00Z",
+    "processedAt": "2026-11-04T06:00:00Z",
     "idempotencyReplayed": false
   },
   "payload": {
@@ -133,269 +166,212 @@ Example response (processedAt varies):
 }
 ```
 
-Continue with PROFILE_SUBMITTED, ACCOUNT_STATEMENT_UPLOADED, then
-UDYAM_DOCUMENT_UPLOADED. Each request advances exactly one business event; there
-is no execute-all operation. An intentionally deferred event can be replayed as
-part of handling a later incoming event if a custom definition configures that.
+Continue with `PROFILE_SUBMITTED`, `ACCOUNT_STATEMENT_UPLOADED` and
+`UDYAM_DOCUMENT_UPLOADED`, using a separate idempotency key for each event.
+There is no execute-all operation.
 
-### Get progress
+### Read current progress
 
 ```json
 {
-  "metadata": {"operation": "GET_STATE", "requestId": "req-003", "referenceId": "APP-101"},
+  "metadata": {
+    "operation": "GET_STATE",
+    "requestId": "req-003",
+    "referenceId": "APP-101"
+  },
   "payload": {}
 }
 ```
 
-nextEvent and nextState are included when there is exactly one outgoing
-transition. For branching workflows use availableTransitions; terminal states
-have an empty list and completed=true. These are configured possibilities, not a
-guarantee that a guard will permit the event.
+`GET_STATE` reads the saved snapshot without locking the instance or starting a
+state machine. It does not execute actions or add transition history.
 
-## Database layout
+`nextEvent` and `nextState` appear only when one outgoing transition exists.
+Branching workflows expose all configured possibilities in `availableTransitions`;
+guards can still reject them. Terminal states have `completed=true` and no
+available transitions.
 
-Runtime JDBC queries are defined in `src/main/resources/sql-queries.yml`.
-Repositories look them up through `SqlQueryFunction.GET_QUERY` using
-`SqlQueryConstants` parent groups and query suffixes, for example
-`SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT,
-SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID)`. The catalog is loaded once from the classpath; missing
-or blank query keys fail explicitly. Named SQL parameters still use JDBC bindings.
-Flyway schema changes remain in `src/main/resources/db/migration`.
+Custom definitions can configure internal transitions and deferred events.
+Internal transitions can apply without changing state. Deferred events return
+`eventOutcome=DEFERRED` and remain in `pendingEvents` until a later request makes
+them applicable. Pending event names are coalesced and cleared on completion.
+Seeded onboarding has neither internal transitions nor deferred events.
 
-All tables, including Flyway's `flyway_schema_history`, use the `workflow_brain`
-schema. See [docs/DATABASE.md](docs/DATABASE.md) for columns, relationships, SQL
-queries and moving existing Flyway history from `public` before startup.
+## Gson serialization
 
-| Table | Stores |
+[GsonConfiguration](src/main/java/com/example/statemachine/config/GsonConfiguration.java)
+provides the shared Gson bean used for workflow HTTP envelopes, machine contexts,
+saved responses and fingerprint generation.
+
+- `WorkflowRequestTypeAdapter` enforces the strict request structure.
+- `WorkflowResponseTypeAdapterFactory` omits optional null fields and always
+  includes `payload`, including `payload: null` on errors.
+- `InstantTypeAdapter` reads and writes ISO-8601 timestamps.
+- `JsonNumberParserFunction` preserves numeric types in saved context variables.
+- `WorkflowGsonHttpMessageConverter` handles workflow envelopes; Swagger documents
+  use their own framework serialization.
+
+Fingerprint serialization preserves the existing property order and escaping so
+changing JSON libraries does not invalidate saved idempotency reservations.
+
+## Idempotency and transactions
+
+`CREATE` and `SUBMIT_EVENT` require an idempotency key; `GET_STATE` forbids one.
+Keys are global within the application and have no automatic expiration.
+
+A SHA-256 fingerprint binds each key to the operation, reference, event and
+normalized workflow key. `requestId` is excluded. Omitting `workflowKey` on
+`CREATE` is equivalent to specifying `onboarding`.
+
+An identical successful retry returns the original HTTP status, payload and
+`processedAt`, echoes the retry's `requestId`, and sets `idempotencyReplayed=true`.
+The saved result can be older than current progress; use `GET_STATE` to read the
+latest state. Different inputs with the same key return `IDEMPOTENCY_CONFLICT`.
+Failed attempts keep the key bound to their inputs without saving a success.
+
+The key reservation commits separately. Processing then locks the reservation;
+event submissions also lock the workflow instance with `SELECT FOR UPDATE`.
+State updates, applied-transition history and successful response storage commit
+together. Actions that call external services would need an outbox or an
+independently idempotent integration because JDBC rollback cannot undo those calls.
+
+## Database and Flyway
+
+All application tables and `flyway_schema_history` use the `workflow_brain` schema.
+
+| Migration | Responsibility |
 | --- | --- |
-| workflow_definition | Workflow identity, version and lifecycle status |
-| workflow_state | Available states and initial/terminal flags |
-| workflow_transition | Source state + event -> target state, transition kind, guard |
-| workflow_action | Names/descriptions of registered Java actions |
-| workflow_guard | Names/descriptions of registered Java guards |
-| workflow_state_action | State entry/exit/activity action bindings and order |
-| workflow_transition_action | Transition action bindings and order |
-| workflow_deferred_event | Events postponed while in a state |
-| workflow_instances | One reference's current state and serialized machine context |
-| workflow_request_replay | Retry fingerprint, original successful response and status |
-| workflow_transition_history | Applied events, source/target states and the request that applied them |
+| [V1__create_workflow_schema.sql](src/main/resources/db/migration/V1__create_workflow_schema.sql) | Tables, constraints, identity columns and indexes |
+| [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Onboarding definition, states, transitions, actions, guard and bindings |
 
-`V1__create_workflow_schema.sql` creates all tables, constraints and indexes.
-`V2__insert_workflow_seed_data.sql` inserts the onboarding definition, states,
-transitions, actions, guards and bindings. Flyway runs schema creation before
-seed data changes. Definition, transition and history IDs are
-INTEGER identity columns, and Java uses Integer for entity IDs. Business
-referenceId, requestId, workflow/state/event codes and idempotency keys remain strings.
+Definition, transition and history IDs are PostgreSQL `INTEGER` identity columns.
+Java entity IDs use `Integer`. Business references, request IDs, idempotency keys
+and workflow/state/event/action/guard codes remain strings. Definition IDs become
+strings only at the Spring StateMachine factory boundary, where the framework
+requires them.
 
-For the testing database reset, stop the application and remove the old application
-tables together with `flyway_schema_history` before restarting. Recreating the
-`workflow_brain` schema also resets its tables, sequences and Flyway history.
-If older history remains in `public`, remove that old history table as part of
-the same testing reset. Dropping only application tables leaves stale migration
-records and prevents the new V1 from running correctly. These initial migrations
-expect an empty schema and a fresh Flyway history.
+The schema has 11 application tables: workflow definitions, states, transitions,
+actions, guards, state-action bindings, transition-action bindings, deferred events,
+instances, request replays and transition history. See
+[docs/DATABASE.md](docs/DATABASE.md) for columns, relationships and inspection SQL.
 
-## How execution and persistence work
+### Reset the testing database
+
+The current V1/V2 files replace the earlier testing migration chain. Stop the app
+and reset the application tables **and Flyway history** before using this baseline.
+Recreating `workflow_brain` also resets its tables, sequences and history. Remove
+an old `public.flyway_schema_history` as part of that reset if it exists.
+
+Deleting only application tables leaves stale migration records. These migrations
+expect an empty schema and a fresh history; they do not upgrade the old baseline.
+
+### Runtime SQL catalog
+
+All runtime JDBC queries are in
+[sql-queries.yml](src/main/resources/sql-queries.yml). Repositories supply a parent
+group and a query suffix through constants:
+
+```java
+final String sql = SqlQueryFunction.GET_QUERY.apply(
+        SqlQueryConstants.WORKFLOW_DEFINITION_PARENT,
+        SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID);
+```
+
+The parent is `workflow-definition`; the suffix is `.find-latest-active-id`.
+`SqlQueryFunction` implements `BiFunction<String, String, String>`, loads the
+catalog once from the classpath and rejects missing or blank lookups. Values are
+bound through JDBC named parameters.
+
+## Workflow configuration and execution
 
 ```text
 WorkflowController -> WorkflowRequestValidator -> WorkflowCommandGateway
-  -> WorkflowExecutionService -> StateMachineFactory
-       -> JdbcWorkflowModelFactory -> JdbcWorkflowDefinitionRepository
+  -> WorkflowCommandService -> WorkflowExecutionService
+       -> StateMachineFactory -> JdbcWorkflowModelFactory
+                                -> JdbcWorkflowDefinitionRepository
        -> DefaultStateMachinePersister -> JdbcWorkflowStateMachinePersistence
                                         -> JdbcWorkflowInstanceRepository
 ```
 
-The controller receives a command envelope. The gateway dispatches CREATE,
-GET_STATE or SUBMIT_EVENT to createWorkflow, getWorkflowState or submitEvent. For CREATE and SUBMIT_EVENT, the model factory builds a fresh machine from the
-versioned database definition. SUBMIT_EVENT locks the instance with SELECT FOR
-UPDATE before restoring it. GET_STATE reads one saved state/context snapshot in
-a read-only transaction without locking the row or starting a machine. The persister reads/writes a
-versioned JSON snapshot using JDBC in the same transaction as workflow mutation.
+Each instance stays pinned to its definition version. New instances select the
+highest active version; retiring it does not change existing instances. Publish
+configuration changes through a new Flyway migration with a new version, using
+generated IDs and their `RETURNING` values for related rows.
 
-Context format 1 supports flat, single-region machines, current state and JSON
-extended variables. It does not claim support for hierarchical/parallel states,
-history pseudostates or arbitrary Java object serialization. Additional formats
-need an explicit codec and migration. Transport message headers are not stored.
+Definitions require one initial state, at least one terminal state, no outgoing
+transitions from terminal states and no unreachable states. Action and guard
+names resolve through `WorkflowBehaviorRegistry`; unknown names fail closed.
+Seeded actions record context values or log activity. The seeded `alwaysAllow`
+guard trusts the consuming service's completed business event.
 
-Spring's transient deferred-event queue is not persisted. Configured deferred
-event names are coalesced in extended state, persisted, and replayed when a
-matching transition becomes available. Terminal completion discards pending
-intent. Deferred payloads are empty under this API contract.
+Machine context format 1 stores a flat, single-region state and JSON-compatible
+extended variables. Hierarchical/parallel states and arbitrary Java object
+serialization are not supported. Deferred event intent is persisted in extended
+state rather than relying on Spring's transient queue.
 
-## Actions, guards and configuration
+Applied events are recorded in `workflow_transition_history`. Internal transitions
+also create history; deferred events create history when actually applied, using
+the request that triggers their application. Creates, reads, rejected events and
+idempotent replays do not create transition history. No history HTTP endpoint is
+exposed.
 
-WorkflowBehaviorRegistry is the explicit Java strategy registry. Seeds include
-recordStateEntry, recordStateExit, observeState and recordTransition. These record
-small context values or log activity; no external business calls are made.
+## Errors and logging
 
-The seeded alwaysAllow guard adds no extra business condition. Real conditions
-can be implemented as named Java guard strategies and referenced in definitions.
-The API trusts the consuming service's business events; the seeded guard is not
-OTP verification or authorization. Unknown action/guard names fail closed.
+Errors use the same envelope with `payload: null`, `metadata.status=FAILED` and
+`error.code`/`error.description`. Caller metadata is echoed when recoverable.
+JSON binding failures can omit caller fields, but the correlation header remains.
 
-State and event names are database strings, so adding/reordering rules does not
-require editing enums. A definition must have one initial state, at least one
-terminal state, no outgoing transitions from terminal states, and no unreachable
-states. Internal transitions keep the same state. Actions execute in configured
-order; thrown action/guard errors roll back the request and return INTERNAL_ERROR.
-A guard returning false returns GUARD_REJECTED. State activity is asynchronous
-observation; keep transactional business decisions in guards and transition/entry/exit actions.
+| HTTP | Error code | Meaning |
+| --- | --- | --- |
+| 400 | `INVALID_REQUEST` | Invalid request structure, operation, fields or unknown event |
+| 404 | `WORKFLOW_NOT_FOUND` | Reference does not exist |
+| 404 | `WORKFLOW_DEFINITION_NOT_FOUND` | No active definition for the workflow key |
+| 404 | `ENDPOINT_NOT_FOUND` | Unknown route |
+| 409 | `WORKFLOW_ALREADY_EXISTS` | Reference already has a workflow |
+| 409 | `EVENT_NOT_ALLOWED` | Event cannot run in the current state |
+| 409 | `GUARD_REJECTED` | Guard prevented the transition |
+| 409 | `IDEMPOTENCY_CONFLICT` | Retry key is bound to different inputs |
+| 405 / 415 | `INVALID_REQUEST` | Unsupported method or content type |
+| 500 | `INTERNAL_ERROR` | Unexpected failure; details remain in server logs |
 
-Treat published definitions as immutable. Make configuration changes through a
-new Flyway migration that inserts a new definition version and its rows. CREATE
-chooses the highest ACTIVE version; existing instances retain their definition_id
-even after that version is RETIRED. A DRAFT definition is not used by CREATE.
-Database permissions and reviewed migrations enforce this operational rule;
-there is no configuration editing API.
+Classes use Lombok `@Slf4j`. INFO logs capture startup, request receipt and successful
+completion. WARN logs identify rejected requests; ERROR logs retain unexpected
+failure details. State processing and retry details are logged at DEBUG. Enable
+these with `LOGGING_LEVEL_COM_EXAMPLE_STATEMACHINE=DEBUG` or the corresponding
+`logging.level.com.example.statemachine` property.
 
-Patterns used: command envelope/dispatch, factory, explicit action/guard
-strategies, repository adapters, persistence adapter and a transactional gateway.
-StateMachine lifecycle calls use the reactive API and await completion; the HTTP
-API and JDBC access remain synchronous.
+Every `/api/` request gets an `X-Correlation-Id` response header. It identifies the
+HTTP attempt separately from `requestId` and `idempotencyKey`. Request attributes
+share recovered metadata and response details with exception handling and the
+logging filter. MDC is restored after each request. Log metadata is bounded and
+control characters are sanitized; raw bodies and business document contents are
+not logged. DEBUG processing logs can precede a rollback; the HTTP completion log
+records the final request outcome.
 
-## Transition history
+## Swagger and source layout
 
-The initial migration creates workflow_transition_history. Applied events are recorded in the same database transaction as the
-workflow state and, when provided, the saved idempotent response. If history
-insertion fails, the workflow update and successful replay response roll back.
-
-Each row records reference_id, definition_id, source_state, event_code,
-target_state, request_id, idempotency_key and created_at. Internal transitions are
-recorded even when source and target are equal. A deferred event gets a history
-row when it is actually applied, using the request ID/key of the request that
-caused its application. One request may therefore produce multiple history rows.
-
-CREATE, GET_STATE, rejected events, deferred intent waiting in a queue and
-idempotency replays do not add transition rows. Existing progress is preserved;
-past transitions cannot be reconstructed from the latest state. There is no new
-history HTTP endpoint. This is applied-transition history, not a full request or
-business-document audit.
-
-## Request and result logging
-
-WorkflowRequestLoggingFilter uses SLF4J for /api/ requests. It logs receipt,
-requestId, referenceId, operation/event, HTTP status, resulting state, event
-outcome, idempotency replay, error code and duration. Exceptions retain stack
-traces on the server. Raw request/response bodies, OTPs and document contents
-are not logged. Metadata is bounded and control characters are sanitized. SLF4J INFO logs capture
-startup and completed HTTP requests; WARN logs identify rejected requests, and
-unexpected failures include server-side stack traces at ERROR. Detailed state,
-event, deferred-event and retry processing is logged at DEBUG. Enable it with
-`logging.level.com.example.statemachine=DEBUG` when troubleshooting. DEBUG
-processing logs may precede a transaction rollback; the HTTP completion log
-reports the final request result.
-
-Every API response carries X-Correlation-Id, a server-generated UUID for the
-HTTP attempt. It is separate from the caller's requestId and idempotencyKey.
-For malformed JSON without recoverable metadata, this correlation ID still
-connects the received/completed/error logs. MDC is cleared/restored after the
-request so identifiers cannot leak to the next request on that thread.
-
-Example result summary:
+Swagger annotations, request examples and response examples are declared directly
+in `WorkflowController`. They cover all three operations, each onboarding event,
+completion, retries, illustrative custom workflows and handled errors. Swagger
+Try it out executes real requests against the configured database.
 
 ```text
-workflow_http_completed correlationId=... requestId=req-101 referenceId=APP-101 operation=SUBMIT_EVENT event=OTP_VERIFIED status=200 currentState=PROFILE_DETAILS eventOutcome=APPLIED idempotencyReplayed=false errorCode=null durationMs=24
+src/main/java/com/example/statemachine/
+  config/          Gson bean and HTTP converter configuration
+  constants/       API properties, error codes, SQL keys and workflow constants
+  controller/      Business endpoint and Swagger annotations
+  dto/api/         HTTP envelopes and response details
+  dto/persistence/ Saved context and database records
+  dto/workflow/    Workflow definitions and commands
+  enums/           Domain enums and functional utility implementations
+  exception/       Per-exception handlers and error envelope construction
+  logging/         HTTP correlation, timing and outcome logs
+  repository/      JDBC repositories and state-machine persistence
+  serialization/   Gson request, response and timestamp adapters
+  service/         Dispatch, idempotency and workflow transactions
+  statemachine/    Model factory, action/guard registry and event processor
+  validation/      Operation-specific request validation
 ```
 
-## Code organization
-
-- api: envelopes, validation and Swagger schemas/configuration.
-- controller: the single business HTTP endpoint.
-- exception: API failures and response mapping.
-- definition: database-backed workflow configuration records/repository.
-- statemachine: model factory, behavior registry, configuration and event processor.
-- persistence: JDBC context, instance, retry and history repositories.
-- service: command dispatch, read-only state retrieval and transactional mutations.
-- logging: HTTP correlation and structured request/result summaries.
-- serialization: Gson adapters for strict request binding, ISO timestamps and API response fields.
-- constants: API properties/error codes, workflow identifiers, JDBC keys and request attributes.
-- enums: workflow operation/outcome types and reusable functional strategies for JSON, metadata, fingerprinting and logging.
-
-WorkflowEventProcessor submits one event and returns its previous state, event,
-current state and outcome. It has no HTTP or database responsibility. The existing
-listener-based classification is retained to preserve guard behavior and detect
-internal transitions; comparing states alone would miss same-state transitions.
-The framework-required model factory build methods retain their interface names.
-
-## Idempotency and transactions
-
-idempotencyKey is required for CREATE and SUBMIT_EVENT and forbidden for GET_STATE.
-requestId is correlation only. Repeat a mutation with the same idempotencyKey to
-receive its original successful HTTP status and payload. The response preserves
-processedAt, echoes the retry's requestId, and sets idempotencyReplayed=true.
-The replay is the original result, which may differ from the instance's latest
-state. GET_STATE returns current progress.
-
-Keys are global within this application. A SHA-256 fingerprint includes operation,
-referenceId, event and normalized workflowKey; requestId is excluded. Payload is
-validated empty. An omitted workflowKey and explicit onboarding are equivalent.
-Different inputs with the same key produce IDEMPOTENCY_CONFLICT.
-
-A key reservation commits separately, then SELECT FOR UPDATE locks it. Workflow
-mutation and successful response storage commit together. Concurrent same-key
-requests serialize; concurrent updates to one reference also serialize. Failed
-requests do not store success, but leave the key bound to the original inputs so
-an identical request can retry. Keys have no automatic expiration.
-
-Only JDBC work can roll back with this transaction. If future actions call an
-external service, use an outbox or an independently idempotent integration.
-
-## Errors and client migration
-
-Failures use the same envelope with payload=null and error.code/description.
-Recoverable request metadata is echoed; malformed JSON and POJO binding failures
-may have no metadata. X-Correlation-Id remains available for tracing.
-
-| HTTP | Code | Meaning |
-| --- | --- | --- |
-| 400 | INVALID_REQUEST | Invalid envelope, fields or event |
-| 404 | WORKFLOW_NOT_FOUND | Reference does not exist |
-| 404 | WORKFLOW_DEFINITION_NOT_FOUND | No active definition for requested key |
-| 404 | ENDPOINT_NOT_FOUND | Removed or unknown route |
-| 409 | WORKFLOW_ALREADY_EXISTS | Reference already exists |
-| 409 | EVENT_NOT_ALLOWED | Event is not allowed in the current state |
-| 409 | GUARD_REJECTED | Existing event processing did not observe a matching transition after its checks |
-| 409 | IDEMPOTENCY_CONFLICT | Retry key used with different inputs |
-| 500 | INTERNAL_ERROR | Unexpected failure, with details only in server logs |
-
-Unsupported HTTP methods/content types return 405/415 with INVALID_REQUEST.
-The old /workflows/create, /workflows/get, /workflows/otp/verify,
-/workflows/submit-profile, /workflows/enter-account-statement and
-/workflows/udyam-document routes have been removed. Update consuming clients to
-the command envelope. Payload details now appear under payload in responses.
-
-## Build
-
-```shell
-mvn clean package
-java -jar target/state-machine-brain-0.0.1-SNAPSHOT.jar
-```
-
-Set the database environment variables described above before starting the JAR.
-The build runs request binding and validation regression tests, then compiles and
-packages the service. Database transactions, concurrency and state-machine
-execution still need integration tests against PostgreSQL.
-
-## Swagger and OpenAPI integration
-
-Swagger UI documents the operation-specific request schemas and provides examples
-for CREATE, GET_STATE and every seeded onboarding event. Responses include progress,
-completion, idempotent retries, branching/internal/deferred custom workflows and
-each handled error code. Custom workflow examples are illustrative and are not
-seeded in the database. Try it out sends real requests to the configured database.
-
-For an MCP service or another API integration that supports OpenAPI, use the
-machine-readable schema at `/v3/api-docs` (JSON) or `/v3/api-docs.yaml` (YAML).
-The application exposes REST and OpenAPI; the MCP adapter/service is a separate
-integration.
-
-## Why metadata and payload are separate
-
-metadata tells the brain which command to run, which application it affects,
-and how to correlate/retry the call. payload contains the business inputs needed
-by that command. For the current contract all business steps are performed by
-the consuming service, so payload remains the required empty object {}.
-
-This separation is an API convention, not a Spring StateMachine requirement.
-It keeps request tracing and routing consistent as business inputs evolve. No
-account-statement approval field or new guard rule is added by this refactor.
+Reusable utilities use enum implementations of `Predicate`, `Function`,
+`BiFunction`, `Supplier`, `Consumer` or `BiConsumer`, called directly at usage sites.
