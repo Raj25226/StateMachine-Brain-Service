@@ -1,80 +1,70 @@
 package com.example.statemachine.repository;
 
-import com.example.statemachine.dto.persistence.Instance;
-import com.example.statemachine.exception.WorkflowFailure;
+import com.example.statemachine.constants.ApiErrorConstants;
+import com.example.statemachine.constants.DatabaseConstants;
+import com.example.statemachine.constants.SqlQueryConstants;
+import com.example.statemachine.dto.persistence.WorkflowInstance;
+import com.example.statemachine.enums.SqlQueryFunction;
+import com.example.statemachine.exception.WorkflowException;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
-import java.util.Map;
 
 @Repository
 public class JdbcWorkflowInstanceRepository {
 
+    private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    private final NamedParameterJdbcTemplate jdbc;
-
-    public JdbcWorkflowInstanceRepository(NamedParameterJdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public JdbcWorkflowInstanceRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-    public void create(String reference, String definition, String state) {
+    public void createWorkflowInstance(String referenceId, Integer definitionId, String currentState) {
 
-        final String sql =   """
-                            INSERT INTO workflow_brain.workflow_instances (reference_id, definition_id, current_state)
-                            VALUES (:reference, :definition, :state)
-                            """;
-        Map<String,Object> params = Map.of("reference", reference, "definition", definition, "state", state);
+        final String sql =   SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE);
+        Map<String,Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId, DatabaseConstants.PARAM_DEFINITION, definitionId, DatabaseConstants.PARAM_STATE, currentState);
 
-        jdbc.update(sql, params);
+        jdbcTemplate.update(sql, parameters);
     }
 
-    public Instance findByReference(String reference) {
-        return readInstance(reference, false);
+    public WorkflowInstance findByReferenceId(String referenceId) {
+        return readWorkflowInstance(referenceId, false);
     }
 
-    public Instance lockByReference(String reference) {
-        return readInstance(reference, true);
+    public WorkflowInstance findAndLockByReferenceId(String referenceId) {
+        return readWorkflowInstance(referenceId, true);
     }
 
-    private Instance readInstance(String reference, boolean lock) {
-        final String sql = lock
-                ? """
-                  SELECT reference_id, definition_id, current_state, machine_context, context_format_version
-                  FROM workflow_brain.workflow_instances WHERE reference_id = :reference
-                  FOR UPDATE
-                  """
-                : """
-                  SELECT reference_id, definition_id, current_state, machine_context, context_format_version
-                  FROM workflow_brain.workflow_instances WHERE reference_id = :reference
-                  """;
-        Map<String, Object> params = Map.of("reference", reference);
+    private WorkflowInstance readWorkflowInstance(String referenceId, boolean lockForUpdate) {
+        final String sql = lockForUpdate
+                ? SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE)
+                : SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE);
+        Map<String, Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId);
 
-        return jdbc.query( sql, params, (rs, row) ->
-                                    new Instance(
-                                        rs.getString("reference_id"),
-                                        rs.getString("definition_id"),
-                                        rs.getString("current_state"),
-                                        rs.getString("machine_context"),
-                                        rs.getInt("context_format_version")
+        return jdbcTemplate.query( sql, parameters, (resultSet, rowNumber) ->
+                                    new WorkflowInstance(
+                                        resultSet.getString(DatabaseConstants.COLUMN_REFERENCE_ID),
+                                        resultSet.getInt(DatabaseConstants.COLUMN_DEFINITION_ID),
+                                        resultSet.getString(DatabaseConstants.COLUMN_CURRENT_STATE),
+                                        resultSet.getString(DatabaseConstants.COLUMN_MACHINE_CONTEXT),
+                                        resultSet.getInt(DatabaseConstants.COLUMN_CONTEXT_FORMAT_VERSION)
                                     )
                 )
                 .stream()
                 .findFirst()
-                .orElseThrow( () -> new WorkflowFailure( HttpStatus.NOT_FOUND, "WORKFLOW_NOT_FOUND",
-                            "Workflow " + reference + " was not found.")
+                .orElseThrow( () -> new WorkflowException( HttpStatus.NOT_FOUND, ApiErrorConstants.WORKFLOW_NOT_FOUND,
+                            "Workflow " + referenceId + " was not found.")
                 );
     }
 
-    public void saveContext(String reference, String state, String json) {
-        final String sql = """
-                        UPDATE workflow_brain.workflow_instances SET current_state = :state, machine_context = :context,
-                        context_format_version = 1, updated_at = CURRENT_TIMESTAMP WHERE reference_id = :reference
-                        """;
+    public void updateWorkflowContext(String referenceId, String currentState, String machineContextJson) {
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_WORKFLOW_CONTEXT);
 
-        Map<String, Object> params = Map.of("reference", reference, "state", state, "context", json);
-        int updated = jdbc.update(sql, params);
+        Map<String, Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId, DatabaseConstants.PARAM_STATE, currentState, DatabaseConstants.PARAM_CONTEXT, machineContextJson);
+        int updatedRowCount = jdbcTemplate.update(sql, parameters);
 
-        if (updated != 1){
+        if (updatedRowCount != 1){
             throw new IllegalStateException("Workflow disappeared while persisting context.");
         }
     }

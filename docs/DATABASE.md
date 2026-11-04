@@ -1,20 +1,38 @@
 # Database design and queries
 
-Every name below is within the `workflow_brain` schema. `workflow_instances`
-keeps its original plural name so existing data and V1 migration stay intact.
+All application tables and `flyway_schema_history` use the `workflow_brain`
+schema. Flyway creates the schema before initializing its migration history.
+`V1__create_workflow_schema.sql` creates tables, constraints and indexes.
+`V2__insert_workflow_seed_data.sql` inserts the onboarding seed data afterward.
+
+This testing baseline replaces the previous migration chain. Reset the application
+tables and Flyway history together before starting it. Recreating `workflow_brain`
+resets its tables, identity sequences and migration history. Remove any old
+`public.flyway_schema_history` as part of the same testing reset if it exists.
+An existing migration history must not be reused with this rewritten V1.
 
 ## Definition tables: shared rules
 
 | Table | Key columns and relationships |
 | --- | --- |
-| workflow_definition | definition_id PK; workflow_key + version unique; status DRAFT/ACTIVE/RETIRED; created_at |
+| workflow_definition | definition_id INTEGER identity PK; workflow_key + version unique; status DRAFT/ACTIVE/RETIRED; created_at |
 | workflow_state | (definition_id, state_code) PK; initial_state; terminal_state; definition FK |
-| workflow_transition | transition_id PK; definition_id; source_state; event_code; target_state; transition_kind; optional guard_code FK; source/target composite FKs to states; (definition_id, source_state, event_code) unique |
+| workflow_transition | transition_id INTEGER identity PK; definition_id; source_state; event_code; target_state; transition_kind; optional guard_code FK; source/target composite FKs to states; (definition_id, source_state, event_code) unique |
 | workflow_action | action_code PK; description |
 | workflow_guard | guard_code PK; description |
 | workflow_state_action | (definition_id, state_code, phase, execution_order) PK; action_code FK; phase ENTRY/EXIT/STATE; composite state FK |
 | workflow_transition_action | (transition_id, execution_order) PK; action_code FK |
 | workflow_deferred_event | (definition_id, state_code, event_code) PK; composite state FK |
+
+`definition_id`, `transition_id` and `history_id` are PostgreSQL INTEGER identity
+columns from initial creation. Definition and transition IDs use Java Integer.
+All foreign-key columns referencing these IDs are INTEGER too. Database-generated
+IDs are used by seed queries without hardcoded ID values or legacy text ID columns.
+
+`reference_id`, `request_id`, idempotency keys and workflow/state/event/action/guard
+codes remain business strings. Reference format validation is still pending.
+Spring StateMachine requires a String machine identifier; numeric definition IDs
+are converted only at that framework boundary.
 
 ## Execution and retry tables
 
@@ -22,7 +40,7 @@ keeps its original plural name so existing data and V1 migration stay intact.
 | --- | --- |
 | workflow_instances | reference_id PK; definition_id FK; current_state; machine_context TEXT; context_format_version; created_at; updated_at; composite (definition_id, current_state) FK |
 | workflow_request_replay | idempotency_key PK; request_fingerprint; response_json TEXT; http_status; created_at; completed_at |
-| workflow_transition_history | history_id identity PK; reference_id FK; definition_id FK; source_state; event_code; target_state; request_id; idempotency_key; created_at |
+| workflow_transition_history | history_id INTEGER identity PK; reference_id FK; definition_id FK; source_state; event_code; target_state; request_id; idempotency_key; created_at |
 
 machine_context is versioned JSON, not a Java object serialized into unreadable
 bytes. It contains formatVersion, state and variables. current_state remains
@@ -83,13 +101,14 @@ After CREATE, one instance row is inserted. After OTP_VERIFIED that row changes
 from OTP_VERIFICATION to PROFILE_DETAILS, along with its context and updated_at.
 Shared definition rows are reused. With a retry key, one replay row is reserved
 and later completed with the successful response. Without a key, no replay row
-is added. V3 adds durable applied-transition history independently of whether a
-retry key was provided.
+is added. Applied-transition history is stored independently of retry responses.
 
 ## Publishing a new version
 
-Use a new Flyway migration. Insert workflow_definition with a new definition_id
-and incremented version, then its states, transitions and bindings. Review its
+Use a new Flyway migration. Insert workflow_definition with a workflow_key and
+incremented version. Use `RETURNING definition_id` to obtain its generated Integer
+ID, then insert its states, transitions and bindings. Use `RETURNING transition_id`
+when inserting transitions to obtain their generated IDs for action bindings. Review its
 graph and registered behavior names before activation. Existing references retain
 their definition_id; only new CREATE requests select the latest ACTIVE version.
 Do not edit/delete rules referenced by existing instances.
@@ -120,4 +139,4 @@ row. A deferred event is recorded when applied, with the request_id and
 idempotency_key of the request that triggered its replay. Idempotency retries,
 rejections, GET_STATE and CREATE add no history. Prior transitions are not backfilled.
 History insertion, context persistence and successful response replay storage
-share the workflow transaction. V1/V2 migrations and existing contexts are unchanged.
+share the workflow transaction. The initial migration creates the history table and its index.

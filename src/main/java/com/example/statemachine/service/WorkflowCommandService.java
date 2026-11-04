@@ -1,119 +1,106 @@
 package com.example.statemachine.service;
 
-import com.example.statemachine.dto.workflow.Command;
-import com.example.statemachine.enums.WorkflowOperation;
-import com.example.statemachine.dto.api.Response;
-import com.example.statemachine.dto.api.ResponseMetadata;
+import com.example.statemachine.constants.ApiErrorConstants;
+import com.example.statemachine.constants.WorkflowConstants;
+import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowDetails;
-import com.example.statemachine.exception.WorkflowFailure;
-import com.example.statemachine.repository.JdbcWorkflowReplayRepository;
+import com.example.statemachine.dto.api.WorkflowResponse;
+import com.example.statemachine.dto.api.WorkflowResponseMetadata;
+import com.example.statemachine.dto.persistence.WorkflowIdempotencyRecord;
+import com.example.statemachine.dto.workflow.WorkflowCommand;
+import com.example.statemachine.enums.WorkflowOperation;
+import com.example.statemachine.exception.WorkflowException;
+import com.example.statemachine.repository.JdbcWorkflowIdempotencyRepository;
+import com.google.gson.Gson;
+import java.time.Instant;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
-import java.time.Instant;
-import com.example.statemachine.dto.persistence.Replay;
-import com.example.statemachine.dto.api.RequestMetadata;
-
-
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 public class WorkflowCommandService {
+
     private final WorkflowExecutionService workflowExecutionService;
-    private final JdbcWorkflowReplayRepository replayRepository;
-    private final ObjectMapper objectMapper;
+    private final JdbcWorkflowIdempotencyRepository idempotencyRepository;
+    private final Gson gson;
 
     public WorkflowCommandService(WorkflowExecutionService workflowExecutionService,
-            JdbcWorkflowReplayRepository replayRepository, ObjectMapper objectMapper) {
+            JdbcWorkflowIdempotencyRepository idempotencyRepository, Gson gson) {
         this.workflowExecutionService = workflowExecutionService;
-        this.replayRepository = replayRepository;
-        this.objectMapper = objectMapper;
+        this.idempotencyRepository = idempotencyRepository;
+        this.gson = gson;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<Response> executeCommand(Command command, String fingerprint) {
+    public ResponseEntity<WorkflowResponse> executeIdempotentCommand(WorkflowCommand command, String requestFingerprint) {
         String idempotencyKey = command.metadata().idempotencyKey();
-        Replay saved = replayRepository.findAndLockByIdempotencyKey(idempotencyKey);
+        WorkflowIdempotencyRecord idempotencyRecord = idempotencyRepository.findAndLockByIdempotencyKey(idempotencyKey);
 
-        if (!fingerprint.equals(saved.fingerprint())) {
-            throw WorkflowFailure.conflict(
-                    "IDEMPOTENCY_CONFLICT",
-                    "This idempotency idempotencyKey is bound to different request inputs."
-                );
+        if (!requestFingerprint.equals(idempotencyRecord.requestFingerprint())) {
+            log.debug("workflow_idempotency_conflict operation={}", command.operation());
+            throw WorkflowException.conflict(
+                    ApiErrorConstants.IDEMPOTENCY_CONFLICT,
+                    "This idempotencyKey is bound to different request inputs.");
         }
 
-        if (saved.response() != null) {
-            try {
-                Response original = objectMapper.readValue(saved.response(), Response.class);
-                ResponseMetadata m = original.metadata();
-                return ResponseEntity.status(saved.status())
-                        .body(
-                            new Response(
-                                new ResponseMetadata(
-                                    m.operation(),
-                                    command.metadata().requestId(),
-                                    m.referenceId(),
-                                    m.event(),
-                                    m.idempotencyKey(),
-                                    m.workflowKey(),
-                                    m.status(),
-                                    m.processedAt(),
-                                    true
-                                ),
-                                original.payload(),
-                                null
-                            )
-                        );
-            } catch (Exception ex) {
-                throw new IllegalStateException("Cannot restore saved response.", ex);
-            }
+        if (idempotencyRecord.responseJson() != null) {
+            log.debug("workflow_idempotency_replay operation={} status={}", command.operation(), idempotencyRecord.httpStatus());
+            return restoreIdempotentResponse(idempotencyRecord, command.metadata().requestId());
         }
 
-        ResponseEntity<Response> response = dispatch(command);
+        ResponseEntity<WorkflowResponse> workflowResponse = dispatchWorkflowCommand(command);
         try {
-            replayRepository.updateReplay(
+            idempotencyRepository.saveSuccessfulResponse(
                     idempotencyKey,
-                    objectMapper.writeValueAsString(response.getBody()),
-                    response.getStatusCode().value()
+                    gson.toJson(workflowResponse.getBody()),
+                    workflowResponse.getStatusCode().value()
             );
-        } catch (Exception ex) {
-            throw new IllegalStateException("Cannot save replay response.", ex);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot save replay response.", exception);
         }
-        return response;
+        return workflowResponse;
     }
 
-    public ResponseEntity<Response> dispatch(Command command) {
-        RequestMetadata metaData = command.metadata();
+    private ResponseEntity<WorkflowResponse> restoreIdempotentResponse(WorkflowIdempotencyRecord idempotencyRecord, String requestId) {
+        try {
+            WorkflowResponse originalResponse = gson.fromJson(idempotencyRecord.responseJson(), WorkflowResponse.class);
+            WorkflowResponseMetadata responseMetadata = originalResponse.metadata();
+            WorkflowResponseMetadata replayedResponseMetadata = new WorkflowResponseMetadata(
+                    responseMetadata.operation(), requestId, responseMetadata.referenceId(), responseMetadata.event(),
+                    responseMetadata.idempotencyKey(), responseMetadata.workflowKey(), responseMetadata.status(),
+                    responseMetadata.processedAt(), true);
+            return ResponseEntity.status(idempotencyRecord.httpStatus())
+                    .body(new WorkflowResponse(replayedResponseMetadata, originalResponse.payload(), null));
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot restore saved response.", exception);
+        }
+    }
+
+    public ResponseEntity<WorkflowResponse> dispatchWorkflowCommand(WorkflowCommand command) {
+        log.debug("workflow_command_dispatching operation={}", command.operation());
+        WorkflowCommandMetadata requestMetadata = command.metadata();
         WorkflowDetails workflowDetails;
         try {
-            workflowDetails =
-                    switch (command.operation()) {
-                        case CREATE -> workflowExecutionService.createWorkflow(metaData.referenceId(), metaData.workflowKey());
-                        case GET_STATE -> workflowExecutionService.getWorkflowState(metaData.referenceId());
-                        case SUBMIT_EVENT -> workflowExecutionService.submitEvent(metaData);
-                    };
-        } catch (RuntimeException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Workflow execution failed.", ex);
+            workflowDetails = switch (command.operation()) {
+                case CREATE -> workflowExecutionService.createWorkflow(
+                        requestMetadata.referenceId(), requestMetadata.workflowKey());
+                case GET_STATE -> workflowExecutionService.getWorkflowState(requestMetadata.referenceId());
+                case SUBMIT_EVENT -> workflowExecutionService.submitEvent(requestMetadata);
+            };
+        } catch (RuntimeException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Workflow execution failed.", exception);
         }
 
-        ResponseMetadata metadata = new ResponseMetadata(
-                                        metaData.operation(),
-                                        metaData.requestId(),
-                                        metaData.referenceId(),
-                                        metaData.event(),
-                                        metaData.idempotencyKey(),
-                                        workflowDetails.workflowKey(),
-                                        "SUCCESS",
-                                        Instant.now(),
-                                        metaData.idempotencyKey() == null ? null : false
-                                    );
-
-        return ResponseEntity.status( command.operation() == WorkflowOperation.CREATE ? HttpStatus.CREATED : HttpStatus.OK)
-                .body(new Response(metadata, workflowDetails, null));
+        WorkflowResponseMetadata responseMetadata = new WorkflowResponseMetadata(
+                requestMetadata.operation(), requestMetadata.requestId(), requestMetadata.referenceId(),
+                requestMetadata.event(), requestMetadata.idempotencyKey(), workflowDetails.workflowKey(),
+                WorkflowConstants.STATUS_SUCCESS, Instant.now(), requestMetadata.idempotencyKey() == null ? null : false);
+        HttpStatus httpStatus = command.operation() == WorkflowOperation.CREATE ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(httpStatus).body(new WorkflowResponse(responseMetadata, workflowDetails, null));
     }
-
-
 }
