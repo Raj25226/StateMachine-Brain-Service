@@ -40,7 +40,7 @@ class WorkflowGsonSerializationTest {
                 "GET_STATE", "req-1", "APP-101", null, null, "onboarding", "SUCCESS",
                 Instant.parse("2026-11-04T06:00:00.123456789Z"), null);
         WorkflowDetails details = new WorkflowDetails("APP-101", "onboarding", 1, "COMPLETED",
-                null, null, true, List.of(), null, List.of());
+                null, null, true, List.of(), null);
         WorkflowResponse response = new WorkflowResponse(metadata, details, null);
         JsonObject json = gson.fromJson(gson.toJson(response), JsonObject.class);
         assertFalse(json.has("error"));

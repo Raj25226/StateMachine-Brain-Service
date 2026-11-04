@@ -26,12 +26,6 @@ CREATE TABLE workflow_brain.workflow_action (
     description VARCHAR(500) NOT NULL
 );
 
-CREATE TABLE workflow_brain.workflow_guard (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    guard_name VARCHAR(100) NOT NULL UNIQUE,
-    description VARCHAR(500) NOT NULL
-);
-
 CREATE TABLE workflow_brain.workflow_transition (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_code VARCHAR(100) NOT NULL,
@@ -39,7 +33,6 @@ CREATE TABLE workflow_brain.workflow_transition (
     fk_id_workflow_definition INTEGER NOT NULL REFERENCES workflow_brain.workflow_definition(id),
     fk_id_source_workflow_state INTEGER NOT NULL,
     fk_id_target_workflow_state INTEGER NOT NULL,
-    fk_id_workflow_guard INTEGER REFERENCES workflow_brain.workflow_guard(id),
     FOREIGN KEY (fk_id_workflow_definition, fk_id_source_workflow_state) REFERENCES workflow_brain.workflow_state(fk_id_workflow_definition, id),
     FOREIGN KEY (fk_id_workflow_definition, fk_id_target_workflow_state) REFERENCES workflow_brain.workflow_state(fk_id_workflow_definition, id),
     UNIQUE (fk_id_workflow_definition, fk_id_source_workflow_state, event_code),
@@ -61,13 +54,6 @@ CREATE TABLE workflow_brain.workflow_transition_action (
     fk_id_workflow_transition INTEGER NOT NULL REFERENCES workflow_brain.workflow_transition(id),
     fk_id_workflow_action INTEGER NOT NULL REFERENCES workflow_brain.workflow_action(id),
     UNIQUE (fk_id_workflow_transition, execution_order)
-);
-
-CREATE TABLE workflow_brain.workflow_deferred_event (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    event_code VARCHAR(100) NOT NULL,
-    fk_id_workflow_state INTEGER NOT NULL REFERENCES workflow_brain.workflow_state(id),
-    UNIQUE (fk_id_workflow_state, event_code)
 );
 
 CREATE TABLE workflow_brain.workflow_instances (

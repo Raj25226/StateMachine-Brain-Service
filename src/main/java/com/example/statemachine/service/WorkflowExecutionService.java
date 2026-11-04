@@ -1,7 +1,6 @@
 package com.example.statemachine.service;
 
 import com.example.statemachine.constants.ApiErrorConstants;
-import com.example.statemachine.constants.WorkflowContextConstants;
 import com.example.statemachine.dto.api.AvailableWorkflowTransition;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowDetails;
@@ -16,12 +15,7 @@ import com.example.statemachine.repository.JdbcWorkflowHistoryRepository;
 import com.example.statemachine.repository.JdbcWorkflowInstanceRepository;
 import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
 import com.example.statemachine.statemachine.WorkflowEventProcessor;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.StateMachineContext;
@@ -80,8 +74,7 @@ public class WorkflowExecutionService {
                     referenceId,
                     workflowDefinition,
                     stateMachine.getState().getId(),
-                    null,
-                    getPendingEventNames(stateMachine.getExtendedState().getVariables()));
+                    null);
         } finally {
             stateMachine.stopReactively().block();
         }
@@ -100,8 +93,7 @@ public class WorkflowExecutionService {
                 referenceId,
                 workflowDefinition,
                 stateMachineContext.getState(),
-                null,
-                getPendingEventNames(stateMachineContext.getExtendedState().getVariables()));
+                null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -122,29 +114,7 @@ public class WorkflowExecutionService {
                 throw WorkflowException.invalid("Unknown event for this workflow definition: " + eventCode);
             }
 
-            WorkflowEventOutcome eventOutcome;
-            if (isEventDeferred(workflowDefinition, stateMachine.getState().getId(), eventCode)) {
-                // Keep this event pending until the workflow can handle it.
-                LinkedHashSet<String> pendingEventNames = new LinkedHashSet<>( getPendingEventNames(stateMachine.getExtendedState().getVariables()));
-                pendingEventNames.add(eventCode);
-
-                updatePendingEventNames(stateMachine, pendingEventNames);
-                eventOutcome = WorkflowEventOutcome.DEFERRED;
-                log.debug("workflow_event_deferred event={} state={} pendingCount={}",
-                        LogValueSanitizerFunction.SANITIZE.apply(eventCode), LogValueSanitizerFunction.SANITIZE.apply(stateMachine.getState().getId()), pendingEventNames.size());
-
-            } else {
-                // Apply the event and save its transition history.
-                processAndRecordEvent(stateMachine, eventCode, workflowDefinition.id(), commandMetadata);
-                eventOutcome = WorkflowEventOutcome.APPLIED;
-                // Process pending events that can run in the new state.
-                applyPendingEvents(stateMachine, workflowDefinition, commandMetadata);
-            }
-
-            if (workflowDefinition.getState(stateMachine.getState().getId()).terminal()) {
-                // Clear pending events when the workflow is complete.
-                updatePendingEventNames(stateMachine, Set.of());
-            }
+            processAndRecordEvent(stateMachine, eventCode, workflowDefinition.id(), commandMetadata);
 
             stateMachinePersister.persist(stateMachine, commandMetadata.referenceId());
 
@@ -152,8 +122,7 @@ public class WorkflowExecutionService {
                     commandMetadata.referenceId(),
                     workflowDefinition,
                     stateMachine.getState().getId(),
-                    eventOutcome,
-                    getPendingEventNames(stateMachine.getExtendedState().getVariables()));
+                    WorkflowEventOutcome.APPLIED);
         } finally {
             stateMachine.stopReactively().block();
         }
@@ -176,10 +145,6 @@ public class WorkflowExecutionService {
                                     eventCode + " is not allowed while the workflow is " + eventResult.currentState() + "."
                                     );
 
-            case GUARD_REJECTED -> throw WorkflowException.conflict(
-                            ApiErrorConstants.GUARD_REJECTED,
-                            "A workflow guard rejected " + eventCode + ".");
-
             case APPLIED -> workflowHistoryRepository.recordTransition(
                             commandMetadata.referenceId(),
                             definitionId,
@@ -191,67 +156,11 @@ public class WorkflowExecutionService {
         }
     }
 
-    private void applyPendingEvents(StateMachine<String, String> stateMachine, WorkflowDefinition workflowDefinition, WorkflowCommandMetadata commandMetadata) {
-
-        LinkedHashSet<String> pendingEventNames = new LinkedHashSet<>(getPendingEventNames(stateMachine.getExtendedState().getVariables()));
-        boolean eventApplied;
-
-        do {
-            eventApplied = false;
-            for (String eventCode : List.copyOf(pendingEventNames)) {
-                String currentState = stateMachine.getState().getId();
-                if (workflowDefinition.getState(currentState).terminal()) {
-                    pendingEventNames.clear();
-                    break;
-                }
-                boolean transitionConfigured =
-                        workflowDefinition.transitions().stream()
-                                .anyMatch(
-                                        transition ->
-                                                transition.source().equals(currentState)
-                                                        && transition.event().equals(eventCode));
-                if (!isEventDeferred(workflowDefinition, currentState, eventCode) && transitionConfigured) {
-                    log.debug("workflow_deferred_event_replaying event={} state={}",
-                            LogValueSanitizerFunction.SANITIZE.apply(eventCode), LogValueSanitizerFunction.SANITIZE.apply(currentState));
-                    processAndRecordEvent(stateMachine, eventCode, workflowDefinition.id(), commandMetadata);
-                    pendingEventNames.remove(eventCode);
-                    eventApplied = true;
-                    break;
-                }
-            }
-        } while (eventApplied && !pendingEventNames.isEmpty());
-        updatePendingEventNames(stateMachine, pendingEventNames);
-    }
-
-    private boolean isEventDeferred(WorkflowDefinition workflowDefinition, String stateCode, String eventCode) {
-        return workflowDefinition.deferredEvents().stream()
-                .anyMatch(
-                        deferred ->
-                                deferred.state().equals(stateCode) && deferred.event().equals(eventCode));
-    }
-
-    private List<String> getPendingEventNames(Map<Object, Object> extendedStateVariables) {
-        Object pendingEventValue = extendedStateVariables.get(WorkflowContextConstants.PENDING_EVENTS);
-        return pendingEventValue instanceof Collection<?> eventNames
-                ? eventNames.stream().map(String.class::cast).toList()
-                : List.of();
-    }
-
-    private void updatePendingEventNames(StateMachine<String, String> stateMachine, Collection<String> eventNames) {
-        if (eventNames.isEmpty()) {
-            stateMachine.getExtendedState().getVariables().remove(WorkflowContextConstants.PENDING_EVENTS);
-        }
-        else{
-            stateMachine.getExtendedState().getVariables().put(WorkflowContextConstants.PENDING_EVENTS, new ArrayList<>(eventNames));
-        }
-    }
-
     private WorkflowDetails buildWorkflowDetails(
             String referenceId,
             WorkflowDefinition workflowDefinition,
             String stateCode,
-            WorkflowEventOutcome eventOutcome,
-            List<String> pendingEventNames) {
+            WorkflowEventOutcome eventOutcome) {
 
         List<AvailableWorkflowTransition> availableTransitions =
                         workflowDefinition.transitions()
@@ -273,8 +182,7 @@ public class WorkflowExecutionService {
                 nextTransition == null ? null : nextTransition.nextState(),
                 workflowDefinition.getState(stateCode).terminal(),
                 availableTransitions,
-                eventOutcome,
-                pendingEventNames
+                eventOutcome
         );
     }
 }

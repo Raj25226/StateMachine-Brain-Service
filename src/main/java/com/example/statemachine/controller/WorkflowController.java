@@ -68,7 +68,7 @@ public class WorkflowController {
 
             CREATE selects the highest ACTIVE definition version. Existing references keep
             their definition version. GET_STATE returns the current persisted snapshot.
-            SUBMIT_EVENT processes one business event; configured pending events may also run.
+            SUBMIT_EVENT processes one business event; the resulting state is persisted.
 
             Seeded onboarding events, in order:
             1. OTP_VERIFIED: OTP_VERIFICATION → PROFILE_DETAILS
@@ -77,11 +77,9 @@ public class WorkflowController {
             4. UDYAM_DOCUMENT_UPLOADED: UDYAM_DOCUMENT_UPLOAD → COMPLETED
 
             Other definitions may use other events. availableTransitions lists configured
-            possibilities; guards can still reject them. nextEvent/nextState appear only
+            possibilities. nextEvent/nextState appear only
             when exactly one outgoing transition exists. Terminal states have completed=true
             and no available transitions. Internal transitions can apply without changing state.
-            DEFERRED means a custom definition queued the event; pendingEvents lists queued
-            event names. Seeded onboarding does not defer events. Completion clears the queue.
 
             Retry CREATE or SUBMIT_EVENT with the same globally scoped idempotencyKey and
             identical operation/referenceId/event/workflowKey. requestId may change. Successful
@@ -147,7 +145,7 @@ public class WorkflowController {
                                             """)
                             })))
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "State read, event applied/deferred, or original SUBMIT_EVENT success replayed. Custom workflow examples are illustrative and are not seeded.",
+        @ApiResponse(responseCode = "200", description = "State read, event applied, or original SUBMIT_EVENT success replayed. Custom workflow examples are illustrative and are not seeded.",
                 headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "Server-generated ID for this HTTP attempt.",
                         schema = @Schema(type = "string", format = "uuid")),
                 content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -157,56 +155,49 @@ public class WorkflowController {
                                     value = """
                                         {
                                           "metadata": {"operation":"GET_STATE","requestId":"req-101","referenceId":"APP-101","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z"},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}],"pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}]}
                                         }
                                         """),
                             @ExampleObject(name = "Completed workflow state",
                                     value = """
                                         {
                                           "metadata": {"operation":"GET_STATE","requestId":"req-101","referenceId":"APP-101","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z"},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"COMPLETED","completed":true,"availableTransitions":[],"pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"COMPLETED","completed":true,"availableTransitions":[]}
                                         }
                                         """),
                             @ExampleObject(name = "Event applied",
                                     value = """
                                         {
                                           "metadata": {"operation":"SUBMIT_EVENT","requestId":"req-101","referenceId":"APP-101","event":"OTP_VERIFIED","idempotencyKey":"APP-101-OTP_VERIFIED","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":false},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}],"eventOutcome":"APPLIED","pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}],"eventOutcome":"APPLIED"}
                                         }
                                         """),
                             @ExampleObject(name = "Workflow completed",
                                     value = """
                                         {
                                           "metadata": {"operation":"SUBMIT_EVENT","requestId":"req-101","referenceId":"APP-101","event":"UDYAM_DOCUMENT_UPLOADED","idempotencyKey":"APP-101-UDYAM_DOCUMENT_UPLOADED","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":false},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"COMPLETED","completed":true,"availableTransitions":[],"eventOutcome":"APPLIED","pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"COMPLETED","completed":true,"availableTransitions":[],"eventOutcome":"APPLIED"}
                                         }
                                         """),
                             @ExampleObject(name = "Idempotent event replay",
                                     value = """
                                         {
                                           "metadata": {"operation":"SUBMIT_EVENT","requestId":"req-101-retry","referenceId":"APP-101","event":"OTP_VERIFIED","idempotencyKey":"APP-101-OTP_VERIFIED","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":true},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}],"eventOutcome":"APPLIED","pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"PROFILE_DETAILS","nextEvent":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD","completed":false,"availableTransitions":[{"event":"PROFILE_SUBMITTED","nextState":"ACCOUNT_STATEMENT_UPLOAD"}],"eventOutcome":"APPLIED"}
                                         }
                                         """),
                             @ExampleObject(name = "Branching workflow (custom definition)",
                                     value = """
                                         {
                                           "metadata": {"operation":"GET_STATE","requestId":"req-101","referenceId":"APP-101","workflowKey":"custom-review","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z"},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"custom-review","definitionVersion":1,"currentState":"UNDER_REVIEW","completed":false,"availableTransitions":[{"event":"APPROVED","nextState":"COMPLETED"},{"event":"CHANGES_REQUESTED","nextState":"NEEDS_CHANGES"}],"pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"custom-review","definitionVersion":1,"currentState":"UNDER_REVIEW","completed":false,"availableTransitions":[{"event":"APPROVED","nextState":"COMPLETED"},{"event":"CHANGES_REQUESTED","nextState":"NEEDS_CHANGES"}]}
                                         }
                                         """),
                             @ExampleObject(name = "Internal transition (custom definition)",
                                     value = """
                                         {
                                           "metadata": {"operation":"SUBMIT_EVENT","requestId":"req-101","referenceId":"APP-101","event":"REVIEW_NOTE_ADDED","idempotencyKey":"APP-101-REVIEW_NOTE_ADDED","workflowKey":"custom-review","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":false},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"custom-review","definitionVersion":1,"currentState":"UNDER_REVIEW","completed":false,"availableTransitions":[{"event":"REVIEW_NOTE_ADDED","nextState":"UNDER_REVIEW"},{"event":"APPROVED","nextState":"COMPLETED"}],"eventOutcome":"APPLIED","pendingEvents":[]}
-                                        }
-                                        """),
-                            @ExampleObject(name = "Deferred event (custom definition)",
-                                    value = """
-                                        {
-                                          "metadata": {"operation":"SUBMIT_EVENT","requestId":"req-101","referenceId":"APP-101","event":"DOCUMENT_RECEIVED","idempotencyKey":"APP-101-DOCUMENT_RECEIVED","workflowKey":"custom-review","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":false},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"custom-review","definitionVersion":1,"currentState":"WAITING_FOR_PROFILE","completed":false,"availableTransitions":[{"event":"PROFILE_READY","nextState":"WAITING_FOR_DOCUMENT"}],"eventOutcome":"DEFERRED","pendingEvents":["DOCUMENT_RECEIVED"],"nextEvent":"PROFILE_READY","nextState":"WAITING_FOR_DOCUMENT"}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"custom-review","definitionVersion":1,"currentState":"UNDER_REVIEW","completed":false,"availableTransitions":[{"event":"REVIEW_NOTE_ADDED","nextState":"UNDER_REVIEW"},{"event":"APPROVED","nextState":"COMPLETED"}],"eventOutcome":"APPLIED"}
                                         }
                                         """)
                         })),
@@ -220,14 +211,14 @@ public class WorkflowController {
                                     value = """
                                         {
                                           "metadata": {"operation":"CREATE","requestId":"req-101","referenceId":"APP-101","idempotencyKey":"APP-101-create","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":false},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"OTP_VERIFICATION","nextEvent":"OTP_VERIFIED","nextState":"PROFILE_DETAILS","completed":false,"availableTransitions":[{"event":"OTP_VERIFIED","nextState":"PROFILE_DETAILS"}],"pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"OTP_VERIFICATION","nextEvent":"OTP_VERIFIED","nextState":"PROFILE_DETAILS","completed":false,"availableTransitions":[{"event":"OTP_VERIFIED","nextState":"PROFILE_DETAILS"}]}
                                         }
                                         """),
                             @ExampleObject(name = "Idempotent create replay",
                                     value = """
                                         {
                                           "metadata": {"operation":"CREATE","requestId":"req-101-retry","referenceId":"APP-101","idempotencyKey":"APP-101-create","workflowKey":"onboarding","status":"SUCCESS","processedAt":"2026-11-04T06:00:00Z","idempotencyReplayed":true},
-                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"OTP_VERIFICATION","nextEvent":"OTP_VERIFIED","nextState":"PROFILE_DETAILS","completed":false,"availableTransitions":[{"event":"OTP_VERIFIED","nextState":"PROFILE_DETAILS"}],"pendingEvents":[]}
+                                          "payload": {"referenceId":"APP-101","workflowKey":"onboarding","definitionVersion":1,"currentState":"OTP_VERIFICATION","nextEvent":"OTP_VERIFIED","nextState":"PROFILE_DETAILS","completed":false,"availableTransitions":[{"event":"OTP_VERIFIED","nextState":"PROFILE_DETAILS"}]}
                                         }
                                         """)
                         })),
@@ -277,7 +268,7 @@ public class WorkflowController {
                                         }
                                         """)
                         })),
-        @ApiResponse(responseCode = "409", description = "Workflow already exists, event is not allowed in the current state, guard rejects it, or retry inputs conflict.",
+        @ApiResponse(responseCode = "409", description = "Workflow already exists, event is not allowed in the current state, retry inputs conflict.",
                 headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "Server-generated ID for this HTTP attempt.",
                         schema = @Schema(type = "string", format = "uuid")),
                 content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -297,14 +288,6 @@ public class WorkflowController {
                                           "metadata": {"status":"FAILED","processedAt":"2026-11-04T06:00:00Z"},
                                           "payload": null,
                                           "error": {"code":"EVENT_NOT_ALLOWED","description":"OTP_VERIFIED is not allowed while the workflow is COMPLETED."}
-                                        }
-                                        """),
-                            @ExampleObject(name = ApiErrorConstants.GUARD_REJECTED,
-                                    value = """
-                                        {
-                                          "metadata": {"status":"FAILED","processedAt":"2026-11-04T06:00:00Z"},
-                                          "payload": null,
-                                          "error": {"code":"GUARD_REJECTED","description":"A workflow guard rejected OTP_VERIFIED."}
                                         }
                                         """),
                             @ExampleObject(name = ApiErrorConstants.IDEMPOTENCY_CONFLICT,
@@ -346,7 +329,7 @@ public class WorkflowController {
                                         }
                                         """)
                         })),
-        @ApiResponse(responseCode = "500", description = "Unexpected database, persistence, action, guard or execution failure. Mutation rolls back; details are logged server-side.",
+        @ApiResponse(responseCode = "500", description = "Unexpected database, persistence, action or execution failure. Mutation rolls back; details are logged server-side.",
                 headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "Server-generated ID for this HTTP attempt.",
                         schema = @Schema(type = "string", format = "uuid")),
                 content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,

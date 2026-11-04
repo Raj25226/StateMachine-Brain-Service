@@ -10,7 +10,6 @@ public final class ApiErrorConstants {
     public static final String WORKFLOW_DEFINITION_NOT_FOUND = "WORKFLOW_DEFINITION_NOT_FOUND";
     public static final String ENDPOINT_NOT_FOUND = "ENDPOINT_NOT_FOUND";
     public static final String EVENT_NOT_ALLOWED = "EVENT_NOT_ALLOWED";
-    public static final String GUARD_REJECTED = "GUARD_REJECTED";
     public static final String IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 }

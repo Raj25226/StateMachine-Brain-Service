@@ -1,6 +1,6 @@
 # Database design and queries
 
-All 11 application tables and `flyway_schema_history` use the `workflow_brain`
+All 9 application tables and `flyway_schema_history` use the `workflow_brain`
 schema. Flyway creates the schema before initializing its history.
 
 - `V1__create_workflow_schema.sql`: tables, constraints, identity columns and indexes.
@@ -15,16 +15,15 @@ testing reset if one remains; do not reuse history from an earlier baseline.
 
 Every application table has an `id INTEGER GENERATED ALWAYS AS IDENTITY` primary
 key. Foreign-key columns are INTEGER and use `fk_id_<full_entity_name>`, including
-`fk_id_workflow_definition`, `fk_id_workflow_state`, `fk_id_workflow_action`, `fk_id_workflow_guard`,
+`fk_id_workflow_definition`, `fk_id_workflow_state`, `fk_id_workflow_action`,
 `fk_id_workflow_transition` and `fk_id_workflow_instance`. State roles use `fk_id_source_workflow_state` and
 `fk_id_target_workflow_state`. Foreign-key columns appear after all business
 columns and timestamps in each table, followed by table-level constraints.
 
 Names and business identifiers are separate from database IDs:
 
-- States retain `state_code`; transitions and deferred events retain `event_code`.
+- States retain `state_code`; transitions retain `event_code`.
 - Actions retain `action_name`, such as `recordStateEntry`.
-- Guards retain `guard_name`, such as `alwaysAllow`.
 - Instances retain a unique `reference_id` for API lookups.
 - Retry reservations retain a unique `idempotency_key`; `request_id` is correlation.
 
@@ -41,11 +40,9 @@ Every table below has its own `id` primary key in addition to the listed columns
 | workflow_definition | workflow_key, version, status, created_at; unique (workflow_key, version) |
 | workflow_state | state_code, initial_state, terminal_state; fk_id_workflow_definition; unique (fk_id_workflow_definition, state_code) |
 | workflow_action | action_name unique, description |
-| workflow_guard | guard_name unique, description |
-| workflow_transition | event_code, transition_kind; fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state, optional fk_id_workflow_guard; unique (fk_id_workflow_definition, fk_id_source_workflow_state, event_code) |
+| workflow_transition | event_code, transition_kind; fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state; unique (fk_id_workflow_definition, fk_id_source_workflow_state, event_code) |
 | workflow_state_action | phase, execution_order; fk_id_workflow_state, fk_id_workflow_action; unique (fk_id_workflow_state, phase, execution_order) |
 | workflow_transition_action | execution_order; fk_id_workflow_transition, fk_id_workflow_action; unique (fk_id_workflow_transition, execution_order) |
-| workflow_deferred_event | event_code; fk_id_workflow_state; unique (fk_id_workflow_state, event_code) |
 | workflow_instances | reference_id unique, machine_context, context_format_version, created_at, updated_at; fk_id_workflow_definition, fk_id_workflow_state |
 | workflow_request_replay | idempotency_key unique, request_fingerprint, response_json, http_status, created_at, completed_at |
 | workflow_transition_history | event_code, request_id, idempotency_key, created_at; fk_id_workflow_instance, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state |
@@ -60,24 +57,23 @@ can reserve a retry key before any instance exists.
 ## Seeded onboarding
 
 V2 creates one active definition (`workflow_key=onboarding`, `version=1`), five
-states, four external transitions, four actions, one guard, fifteen state-action
-bindings and four transition-action bindings. There are no deferred-event rows.
+states, four external transitions, four actions, fifteen state-action
+bindings and four transition-action bindings.
 
 Seed statements resolve generated IDs through workflow keys, state codes, action
-names and guard names. They do not depend on specific identity sequence values.
-Runtime queries join action/guard tables to resolve the registered Java names.
+names. They do not depend on specific identity sequence values.
+Runtime queries join the action table to resolve the registered Java names.
 
 ## Inspect workflow rules
 
 ```sql
 SELECT d.id AS definition_id, d.workflow_key, d.version, t.id AS transition_id,
        source.state_code AS source_state, t.event_code,
-       target.state_code AS target_state, t.transition_kind, g.guard_name
+       target.state_code AS target_state, t.transition_kind
 FROM workflow_brain.workflow_transition t
 JOIN workflow_brain.workflow_definition d ON d.id = t.fk_id_workflow_definition
 JOIN workflow_brain.workflow_state source ON source.id = t.fk_id_source_workflow_state
 JOIN workflow_brain.workflow_state target ON target.id = t.fk_id_target_workflow_state
-LEFT JOIN workflow_brain.workflow_guard g ON g.id = t.fk_id_workflow_guard
 ORDER BY d.workflow_key, d.version, t.id;
 ```
 
@@ -135,8 +131,7 @@ The index `(fk_id_workflow_instance, created_at)` supports history lookups. `id`
 transaction timestamp ties; sequence gaps after rollback are normal.
 
 Only applied events produce history. Internal transitions are recorded even when
-the state stays the same. Deferred events are recorded when applied, using the
-request that triggers them. Creates, reads, rejected events and retry replays add
+the state stays the same. Creates, reads, rejected events and retry replays add
 no history. History stores numeric relationships and resolves display values by
 joining the instance and state tables.
 
@@ -144,8 +139,8 @@ joining the instance and state tables.
 
 Use a new Flyway migration. Insert a definition with its workflow_key and new
 version, using `RETURNING id` for its generated ID. Insert its states with
-fk_id_workflow_definition and capture their IDs for transitions. Resolve action and guard
-IDs by action_name and guard_name. Use transition IDs for action bindings.
+fk_id_workflow_definition and capture their IDs for transitions. Resolve action
+IDs by action_name. Use transition IDs for action bindings.
 
 Existing instances retain their fk_id_workflow_definition. New creates select the highest
 ACTIVE version. Review graph structure and registered names before activation;

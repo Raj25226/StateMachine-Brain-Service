@@ -20,12 +20,9 @@ INSERT INTO workflow_brain.workflow_action (action_name, description) VALUES
 ('observeState', 'Log state activity at DEBUG level'),
 ('recordTransition', 'Record the last processed transition event in extended state');
 
-INSERT INTO workflow_brain.workflow_guard (guard_name, description)
-VALUES ('alwaysAllow', 'No additional business condition; the caller supplies completed business events');
-
 INSERT INTO workflow_brain.workflow_transition
-(event_code, transition_kind, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state, fk_id_workflow_guard)
-SELECT seed.event_code, 'EXTERNAL', definition.id, source_state.id, target_state.id, guard.id
+(event_code, transition_kind, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state)
+SELECT seed.event_code, 'EXTERNAL', definition.id, source_state.id, target_state.id
 FROM workflow_brain.workflow_definition definition
 CROSS JOIN (VALUES
     ('OTP_VERIFICATION', 'OTP_VERIFIED', 'PROFILE_DETAILS'),
@@ -37,7 +34,6 @@ JOIN workflow_brain.workflow_state source_state
     ON source_state.fk_id_workflow_definition = definition.id AND source_state.state_code = seed.source_state
 JOIN workflow_brain.workflow_state target_state
     ON target_state.fk_id_workflow_definition = definition.id AND target_state.state_code = seed.target_state
-JOIN workflow_brain.workflow_guard guard ON guard.guard_name = 'alwaysAllow'
 WHERE definition.workflow_key = 'onboarding' AND definition.version = 1;
 
 INSERT INTO workflow_brain.workflow_state_action (phase, execution_order, fk_id_workflow_state, fk_id_workflow_action)

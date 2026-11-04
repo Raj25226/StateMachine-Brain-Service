@@ -12,8 +12,6 @@ public final class DatabaseConstants {
     public static final String COLUMN_FK_ID_WORKFLOW_DEFINITION = "fk_id_workflow_definition";
     public static final String COLUMN_EVENT_CODE = "event_code";
     public static final String COLUMN_EXECUTION_ORDER = "execution_order";
-    public static final String COLUMN_FK_ID_WORKFLOW_GUARD = "fk_id_workflow_guard";
-    public static final String COLUMN_GUARD_NAME = "guard_name";
     public static final String COLUMN_HTTP_STATUS = "http_status";
     public static final String COLUMN_INITIAL_STATE = "initial_state";
     public static final String COLUMN_MACHINE_CONTEXT = "machine_context";

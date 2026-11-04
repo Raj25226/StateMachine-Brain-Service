@@ -1,7 +1,6 @@
 package com.example.statemachine.statemachine;
 
 import com.example.statemachine.constants.WorkflowConstants;
-import com.example.statemachine.dto.workflow.DeferredWorkflowEvent;
 import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
 import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
@@ -61,12 +60,6 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                             stateData.setEntryActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_ENTRY));
                             stateData.setExitActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_EXIT));
                             stateData.setStateActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_STATE));
-                            stateData.setDeferred(
-                                    workflowDefinition.deferredEvents().stream()
-                                            .filter(deferredEvent -> deferredEvent.state().equals(workflowStateDefinition.code()))
-                                            .map(deferredEvent -> deferredEvent.event())
-                                            .toList()
-                            );
                             return stateData;
                         }
                 )
@@ -79,7 +72,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                         workflowTransition.target(),
                         workflowTransition.event(),
                         resolveTransitionActions(workflowTransition.actionNames()),
-                        workflowTransition.guardName() == null ? null : resolveGuardWithErrorHandling(workflowTransition.guardName()),
+                        null,
                         TransitionKind.valueOf(workflowTransition.kind())
                     )
                 )
@@ -141,16 +134,6 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                 );
     }
 
-    private Function<StateContext<String, String>, Mono<Boolean>> resolveGuardWithErrorHandling(String behaviorCode) {
-        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuardByName(behaviorCode);
-        return stateContext -> Mono.defer(() -> guard.apply(stateContext))
-                .doOnError(error -> {
-                    log.error("workflow_guard_failed guard={}", LogValueSanitizerFunction.SANITIZE.apply(behaviorCode), error);
-                    stateContext.getStateMachine().setStateMachineError(
-                            new IllegalStateException("Workflow guard failed: " + behaviorCode, error));
-                });
-    }
-
     private void validateWorkflowStructure(WorkflowDefinition workflowDefinition) {
 
         if (workflowDefinition.states().stream().filter(WorkflowStateDefinition::initial).count() != 1) {
@@ -194,16 +177,5 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
             throw new IllegalStateException("Workflow contains unreachable states.");
         }
 
-        for (DeferredWorkflowEvent deferred : workflowDefinition.deferredEvents()) {
-
-            if (workflowDefinition.getState(deferred.state()).terminal()) {
-                throw new IllegalStateException("Terminal states cannot defer events.");
-            }
-
-            if (workflowDefinition.transitions().stream()
-                    .noneMatch(workflowTransition -> workflowTransition.event().equals(deferred.event()))) {
-                throw new IllegalStateException("Deferred event has no transition handler: " + deferred.event());
-            }
-        }
     }
 }

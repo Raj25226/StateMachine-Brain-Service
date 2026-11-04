@@ -11,7 +11,7 @@ import org.springframework.statemachine.action.Actions;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-/** Explicit strategy registry: database names select code; no expressions are evaluated. */
+/** Explicit strategy registry: database action names select code; no expressions are evaluated. */
 @Component
 @Slf4j
 public class WorkflowBehaviorRegistry {
@@ -50,9 +50,6 @@ public class WorkflowBehaviorRegistry {
                         Actions.from( stateContext -> log.debug("workflow_state_activity definition={}", LogValueSanitizerFunction.SANITIZE.apply(stateContext.getStateMachine().getId())))
             );
 
-    private final Map<String, Function<StateContext<String, String>, Mono<Boolean>>> guards =
-            Map.of(WorkflowBehaviorConstants.ALWAYS_ALLOW, stateContext -> Mono.just(true));
-
     public Function<StateContext<String, String>, Mono<Void>> resolveActionByName(String actionName) {
 
         Function<StateContext<String, String>, Mono<Void>> action =
@@ -64,17 +61,4 @@ public class WorkflowBehaviorRegistry {
 
         return action;
     }
-
-    public Function<StateContext<String, String>, Mono<Boolean>> resolveGuardByName(String guardName) {
-
-        Function<StateContext<String, String>, Mono<Boolean>> guard =
-                guards.get(guardName);
-
-        if (guard == null) {
-            throw new IllegalStateException("Unregistered workflow guard: " + guardName);
-        }
-        return guard;
-    }
-
 }
-

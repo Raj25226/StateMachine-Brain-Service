@@ -100,7 +100,7 @@ with the original idempotency key replays its saved result.
 PAN, mobile and email format validation is intentionally pending; currently only
 a nonblank value is required by request validation.
 Workflow keys and event codes are validated against database definitions. Event
-execution also checks the current state and guards.
+execution also checks the current state.
 
 Request validation does not impose string-length limits. Database columns still
 limit references, workflow keys and event codes to 100 characters, and persisted
@@ -166,8 +166,7 @@ Example response:
     "availableTransitions": [
       {"event": "PROFILE_SUBMITTED", "nextState": "ACCOUNT_STATEMENT_UPLOAD"}
     ],
-    "eventOutcome": "APPLIED",
-    "pendingEvents": []
+    "eventOutcome": "APPLIED"
   }
 }
 ```
@@ -194,14 +193,12 @@ state machine. It does not execute actions or add transition history.
 
 `nextEvent` and `nextState` appear only when one outgoing transition exists.
 Branching workflows expose all configured possibilities in `availableTransitions`;
-guards can still reject them. Terminal states have `completed=true` and no
+Terminal states have `completed=true` and no
 available transitions.
 
-Custom definitions can configure internal transitions and deferred events.
-Internal transitions can apply without changing state. Deferred events return
-`eventOutcome=DEFERRED` and remain in `pendingEvents` until a later request makes
-them applicable. Pending event names are coalesced and cleared on completion.
-Seeded onboarding has neither internal transitions nor deferred events.
+Custom definitions can configure internal transitions, which apply without changing
+state. Each submitted event is processed immediately; unsupported events return
+`EVENT_NOT_ALLOWED`.
 
 ## Gson serialization
 
@@ -248,24 +245,23 @@ All application tables and `flyway_schema_history` use the `workflow_brain` sche
 | Migration | Responsibility |
 | --- | --- |
 | [V1__create_workflow_schema.sql](src/main/resources/db/migration/V1__create_workflow_schema.sql) | Tables, constraints, identity columns and indexes |
-| [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Onboarding definition, states, transitions, actions, guard and bindings |
+| [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Onboarding definition, states, transitions, actions and bindings |
 
 Every application table has an `id INTEGER` identity primary key, represented by
 Integer in Java. All foreign-key columns use `fk_id_<full_entity_name>`, for example
-`fk_id_workflow_definition`, `fk_id_workflow_state`, `fk_id_workflow_action`, `fk_id_workflow_guard`, `fk_id_workflow_transition`
+`fk_id_workflow_definition`, `fk_id_workflow_state`, `fk_id_workflow_action`, `fk_id_workflow_transition`
 and `fk_id_workflow_instance`. Source/target relationships use `fk_id_source_workflow_state` and
 `fk_id_target_workflow_state`. Foreign-key columns appear after all business
 columns and timestamps in each table, followed by table-level constraints.
 
 Business references, request IDs, idempotency keys and workflow/state/event codes
-remain strings. Actions and guards store their Java registry names in `action_name`
-and `guard_name`; related rows store their integer IDs. Runtime joins resolve
+remain strings. Actions store their Java registry names in `action_name`; related rows store their integer IDs. Runtime joins resolve
 these names and the readable state codes. Definition IDs become strings only at
 the Spring StateMachine factory boundary, where the framework requires them.
 
-The schema has 11 application tables: workflow definitions, states, transitions,
-actions, guards, state-action bindings, transition-action bindings, deferred events,
-instances, request replays and transition history. See
+The schema has 9 application tables: workflow definitions, states, transitions,
+actions, state-action bindings, transition-action bindings, instances, request
+replays and transition history. See
 [docs/DATABASE.md](docs/DATABASE.md) for columns, relationships and inspection SQL.
 
 ### Reset the testing database
@@ -312,19 +308,15 @@ configuration changes through a new Flyway migration with a new version, using
 generated IDs and their `RETURNING` values for related rows.
 
 Definitions require one initial state, at least one terminal state, no outgoing
-transitions from terminal states and no unreachable states. Action and guard
-names resolve through `WorkflowBehaviorRegistry`; unknown names fail closed.
-Seeded actions record context values or log activity. The seeded `alwaysAllow`
-guard trusts the consuming service's completed business event.
+transitions from terminal states and no unreachable states. Action names resolve through `WorkflowBehaviorRegistry`; unknown names fail closed.
+Seeded actions record context values or log activity. The service trusts the consuming service's completed business events.
 
 Machine context format 1 stores a flat, single-region state and JSON-compatible
 extended variables. Hierarchical/parallel states and arbitrary Java object
-serialization are not supported. Deferred event intent is persisted in extended
-state rather than relying on Spring's transient queue.
+serialization are not supported.
 
 Applied events are recorded in `workflow_transition_history`. Internal transitions
-also create history; deferred events create history when actually applied, using
-the request that triggers their application. Creates, reads, rejected events and
+also create history. Creates, reads, rejected events and
 idempotent replays do not create transition history. No history HTTP endpoint is
 exposed.
 
@@ -342,7 +334,6 @@ JSON binding failures can omit caller fields, but the correlation header remains
 | 404 | `ENDPOINT_NOT_FOUND` | Unknown route |
 | 409 | `WORKFLOW_ALREADY_EXISTS` | Reference already has a workflow |
 | 409 | `EVENT_NOT_ALLOWED` | Event cannot run in the current state |
-| 409 | `GUARD_REJECTED` | Guard prevented the transition |
 | 409 | `IDEMPOTENCY_CONFLICT` | Retry key is bound to different inputs |
 | 405 / 415 | `INVALID_REQUEST` | Unsupported method or content type |
 | 500 | `INTERNAL_ERROR` | Unexpected failure; details remain in server logs |
@@ -382,7 +373,7 @@ src/main/java/com/example/statemachine/
   repository/      JDBC repositories and state-machine persistence
   serialization/   Gson request, response and timestamp adapters
   service/         Dispatch, idempotency and workflow transactions
-  statemachine/    Model factory, action/guard registry and event processor
+  statemachine/    Model factory, action registry and event processor
   validation/      Operation-specific request validation
 ```
 

@@ -4,7 +4,6 @@ import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
 import com.example.statemachine.dto.persistence.WorkflowDefinitionMetadata;
-import com.example.statemachine.dto.workflow.DeferredWorkflowEvent;
 import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
 import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
@@ -57,15 +56,13 @@ public class JdbcWorkflowDefinitionRepository {
         final List<WorkflowStateDefinition> states = loadStates(parameters, stateActions);
         final Map<Integer, List<String>> transitionActions = loadTransitionActions(parameters);
         final List<WorkflowTransitionDefinition> transitions = loadTransitions(parameters, transitionActions);
-        final List<DeferredWorkflowEvent> deferredEvents = loadDeferredEvents(parameters);
 
         return new WorkflowDefinition(
                 definitionId,
                 definitionMetadata.workflowKey(),
                 definitionMetadata.version(),
                 states,
-                transitions,
-                deferredEvents
+                transitions
         );
     }
 
@@ -161,24 +158,10 @@ public class JdbcWorkflowDefinitionRepository {
                     resultSet.getString(DatabaseConstants.COLUMN_EVENT_CODE),
                     resultSet.getString(DatabaseConstants.COLUMN_TARGET_STATE),
                     resultSet.getString(DatabaseConstants.COLUMN_TRANSITION_KIND),
-                    resultSet.getObject(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_GUARD, Integer.class),
-                    resultSet.getString(DatabaseConstants.COLUMN_GUARD_NAME),
                     transitionActions
             );
         });
 
         return transitionDefinitions;
     }
-
-    private List<DeferredWorkflowEvent> loadDeferredEvents(Map<String, ?> parameters) {
-        String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFERRED_EVENTS);
-
-        return jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
-            return new DeferredWorkflowEvent(
-                    resultSet.getString(DatabaseConstants.COLUMN_STATE_CODE),
-                    resultSet.getString(DatabaseConstants.COLUMN_EVENT_CODE)
-            );
-        });
-    }
-
 }

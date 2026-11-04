@@ -7,8 +7,7 @@ public record WorkflowDefinition(
         String workflowKey,
         int version,
         List<WorkflowStateDefinition> states,
-        List<WorkflowTransitionDefinition> transitions,
-        List<DeferredWorkflowEvent> deferredEvents
+        List<WorkflowTransitionDefinition> transitions
 ) {
 
     public WorkflowStateDefinition getState(String stateCode) {

@@ -23,7 +23,6 @@ public final class ApiPropertyConstants {
     public static final String COMPLETED = "completed";
     public static final String AVAILABLE_TRANSITIONS = "availableTransitions";
     public static final String EVENT_OUTCOME = "eventOutcome";
-    public static final String PENDING_EVENTS = "pendingEvents";
     public static final String CODE = "code";
     public static final String DESCRIPTION = "description";
 }

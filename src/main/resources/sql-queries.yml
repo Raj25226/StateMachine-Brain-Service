@@ -32,19 +32,12 @@ workflow-definition:
     ORDER BY transition_action.fk_id_workflow_transition, transition_action.execution_order
   find-transitions: |
     SELECT transition.id, source_state.state_code AS source_state, transition.event_code,
-           target_state.state_code AS target_state, transition.transition_kind, transition.fk_id_workflow_guard, guard.guard_name
+           target_state.state_code AS target_state, transition.transition_kind
     FROM workflow_brain.workflow_transition transition
     JOIN workflow_brain.workflow_state source_state ON source_state.id = transition.fk_id_source_workflow_state
     JOIN workflow_brain.workflow_state target_state ON target_state.id = transition.fk_id_target_workflow_state
-    LEFT JOIN workflow_brain.workflow_guard guard ON guard.id = transition.fk_id_workflow_guard
     WHERE transition.fk_id_workflow_definition = :definitionId
     ORDER BY transition.id
-  find-deferred-events: |
-    SELECT state.state_code, deferred.event_code
-    FROM workflow_brain.workflow_deferred_event deferred
-    JOIN workflow_brain.workflow_state state ON state.id = deferred.fk_id_workflow_state
-    WHERE state.fk_id_workflow_definition = :definitionId
-    ORDER BY state.state_code, deferred.event_code
 
 transition-history:
   insert: |

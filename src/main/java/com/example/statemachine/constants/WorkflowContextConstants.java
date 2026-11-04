@@ -7,5 +7,4 @@ public final class WorkflowContextConstants {
     public static final String LAST_ENTERED_STATE = "lastEnteredState";
     public static final String LAST_EXITED_STATE = "lastExitedState";
     public static final String LAST_PROCESSED_EVENT = "lastProcessedEvent";
-    public static final String PENDING_EVENTS = ApiPropertyConstants.PENDING_EVENTS;
 }

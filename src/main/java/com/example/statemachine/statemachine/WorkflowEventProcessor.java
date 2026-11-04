@@ -65,7 +65,7 @@ public class WorkflowEventProcessor {
                     previousStateCode,
                     event,
                     stateMachine.getState().getId(),
-                    transitionApplied.get() ? WorkflowEventProcessingOutcome.APPLIED : WorkflowEventProcessingOutcome.GUARD_REJECTED
+                    transitionApplied.get() ? WorkflowEventProcessingOutcome.APPLIED : WorkflowEventProcessingOutcome.EVENT_NOT_ALLOWED
             );
 
         } finally {

@@ -17,7 +17,6 @@ public final class SqlQueryConstants {
     public static final String FIND_STATES = ".find-states";
     public static final String FIND_TRANSITION_ACTIONS = ".find-transition-actions";
     public static final String FIND_TRANSITIONS = ".find-transitions";
-    public static final String FIND_DEFERRED_EVENTS = ".find-deferred-events";
     public static final String INSERT_TRANSITION_HISTORY = ".insert";
     public static final String EXISTS_BY_IDEMPOTENCY_KEY = ".exists-by-key";
     public static final String RESERVE_IDEMPOTENCY_KEY = ".reserve-key";

@@ -8,7 +8,5 @@ public record WorkflowTransitionDefinition(
         String event,
         String target,
         String kind,
-        Integer guardId,
-        String guardName,
         List<String> actionNames
 ) {}
