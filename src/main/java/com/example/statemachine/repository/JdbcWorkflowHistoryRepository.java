@@ -1,5 +1,6 @@
 package com.example.statemachine.repository;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
 import com.example.statemachine.enums.SqlQueryFunction;
@@ -12,12 +13,9 @@ import org.springframework.stereotype.Repository;
  * Append-only records of applied events; participates in the caller's workflow transaction.
  */
 @Repository
+@AllArgsConstructor
 public class JdbcWorkflowHistoryRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public JdbcWorkflowHistoryRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public void recordTransition(String referenceId, Integer definitionId, String sourceState,
                                  String event, String targetState, String requestId, String idempotencyKey) {

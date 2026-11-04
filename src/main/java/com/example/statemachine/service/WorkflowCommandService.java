@@ -1,5 +1,6 @@
 package com.example.statemachine.service;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
@@ -21,18 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@AllArgsConstructor
 public class WorkflowCommandService {
 
     private final WorkflowExecutionService workflowExecutionService;
     private final JdbcWorkflowIdempotencyRepository idempotencyRepository;
     private final Gson gson;
-
-    public WorkflowCommandService(WorkflowExecutionService workflowExecutionService,
-            JdbcWorkflowIdempotencyRepository idempotencyRepository, Gson gson) {
-        this.workflowExecutionService = workflowExecutionService;
-        this.idempotencyRepository = idempotencyRepository;
-        this.gson = gson;
-    }
 
     @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<WorkflowResponse> executeIdempotentCommand(WorkflowCommand command, String requestFingerprint) {

@@ -1,5 +1,6 @@
 package com.example.statemachine.repository;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
 import com.example.statemachine.dto.persistence.WorkflowIdempotencyRecord;
@@ -9,13 +10,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@AllArgsConstructor
 public class JdbcWorkflowIdempotencyRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public JdbcWorkflowIdempotencyRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public boolean existsByIdempotencyKey(String idempotencyKey) {
         final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.EXISTS_BY_IDEMPOTENCY_KEY);

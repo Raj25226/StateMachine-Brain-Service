@@ -1,5 +1,6 @@
 package com.example.statemachine.repository;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
@@ -12,13 +13,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@AllArgsConstructor
 public class JdbcWorkflowInstanceRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public JdbcWorkflowInstanceRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public void createWorkflowInstance(String referenceId, Integer definitionId, String currentState) {
 

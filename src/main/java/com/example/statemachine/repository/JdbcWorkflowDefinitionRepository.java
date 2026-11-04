@@ -1,5 +1,6 @@
 package com.example.statemachine.repository;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
@@ -20,13 +21,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@AllArgsConstructor
 public class JdbcWorkflowDefinitionRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public JdbcWorkflowDefinitionRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public Integer findLatestActiveDefinitionId(String workflowKey) {
         final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID);

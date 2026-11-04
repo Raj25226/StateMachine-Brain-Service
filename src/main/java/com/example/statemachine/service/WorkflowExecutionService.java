@@ -1,5 +1,6 @@
 package com.example.statemachine.service;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.dto.api.AvailableWorkflowTransition;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@AllArgsConstructor
 public class WorkflowExecutionService {
 
     private final JdbcWorkflowDefinitionRepository workflowDefinitionRepository;
@@ -35,24 +37,6 @@ public class WorkflowExecutionService {
     private final JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence;
     private final JdbcWorkflowHistoryRepository workflowHistoryRepository;
     private final WorkflowEventProcessor workflowEventProcessor;
-
-    public WorkflowExecutionService(
-            JdbcWorkflowDefinitionRepository workflowDefinitionRepository,
-            JdbcWorkflowInstanceRepository workflowInstanceRepository,
-            StateMachineFactory<String, String> stateMachineFactory,
-            StateMachinePersister<String, String, String> stateMachinePersister,
-            JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence,
-            JdbcWorkflowHistoryRepository workflowHistoryRepository,
-            WorkflowEventProcessor workflowEventProcessor) {
-
-        this.workflowDefinitionRepository = workflowDefinitionRepository;
-        this.workflowInstanceRepository = workflowInstanceRepository;
-        this.stateMachineFactory = stateMachineFactory;
-        this.stateMachinePersister = stateMachinePersister;
-        this.workflowStateMachinePersistence = workflowStateMachinePersistence;
-        this.workflowHistoryRepository = workflowHistoryRepository;
-        this.workflowEventProcessor = workflowEventProcessor;
-    }
 
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails createWorkflow(String referenceId, String workflowKey) throws Exception {

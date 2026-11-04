@@ -1,5 +1,6 @@
 package com.example.statemachine.statemachine;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
@@ -25,16 +26,11 @@ import reactor.core.publisher.Mono;
 
 @Slf4j
 @Component
+@AllArgsConstructor
 public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String, String> {
 
     private final JdbcWorkflowDefinitionRepository definitionRepository;
     private final WorkflowBehaviorRegistry behaviorRegistry;
-
-    public JdbcWorkflowModelFactory(JdbcWorkflowDefinitionRepository definitionRepository,
-                                    WorkflowBehaviorRegistry behaviorRegistry) {
-        this.definitionRepository = definitionRepository;
-        this.behaviorRegistry = behaviorRegistry;
-    }
 
     @Override
     public StateMachineModel<String, String> build() {

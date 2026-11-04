@@ -1,5 +1,6 @@
 package com.example.statemachine.controller;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.ApiPropertyConstants;
 import com.example.statemachine.constants.RequestAttributeConstants;
@@ -37,15 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 @RestController
 @RequestMapping(WorkflowConstants.WORKFLOWS_PATH)
+@AllArgsConstructor
 public class WorkflowController {
 
     private final WorkflowRequestValidator workflowRequestValidator;
     private final WorkflowCommandGateway workflowCommandGateway;
-
-    public WorkflowController(WorkflowRequestValidator workflowRequestValidator, WorkflowCommandGateway workflowCommandGateway) {
-        this.workflowRequestValidator = workflowRequestValidator;
-        this.workflowCommandGateway = workflowCommandGateway;
-    }
 
     @Operation(
             operationId = "processWorkflowCommand",

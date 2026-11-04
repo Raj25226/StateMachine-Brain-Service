@@ -1,5 +1,6 @@
 package com.example.statemachine.service;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.dto.api.WorkflowResponse;
 import com.example.statemachine.dto.workflow.WorkflowCommand;
 import com.example.statemachine.enums.WorkflowRequestFingerprintFunction;
@@ -13,21 +14,13 @@ import org.springframework.stereotype.Service;
 /** Command gateway: dispatch and retry policy */
 @Slf4j
 @Service
+@AllArgsConstructor
 public class WorkflowCommandGateway {
 
     private final WorkflowCommandService workflowCommandService;
     private final WorkflowIdempotencyService workflowIdempotencyService;
     private final JdbcWorkflowIdempotencyRepository idempotencyRepository;
     private final Gson gson;
-
-    public WorkflowCommandGateway(WorkflowCommandService workflowCommandService,
-            WorkflowIdempotencyService workflowIdempotencyService,
-            JdbcWorkflowIdempotencyRepository idempotencyRepository, Gson gson) {
-        this.workflowCommandService = workflowCommandService;
-        this.workflowIdempotencyService = workflowIdempotencyService;
-        this.idempotencyRepository = idempotencyRepository;
-        this.gson = gson;
-    }
 
     public ResponseEntity<WorkflowResponse> executeWorkflowCommand(WorkflowCommand command) {
         String idempotencyKey = command.metadata().idempotencyKey();

@@ -1,5 +1,6 @@
 package com.example.statemachine.repository;
 
+import lombok.AllArgsConstructor;
 import com.example.statemachine.dto.persistence.StoredWorkflowContext;
 import com.example.statemachine.dto.persistence.WorkflowInstance;
 import com.google.gson.Gson;
@@ -14,15 +15,11 @@ import org.springframework.stereotype.Component;
 /** Versioned JSON context for this application's flat, single-region machines. */
 
 @Component
+@AllArgsConstructor
 public class JdbcWorkflowStateMachinePersistence implements StateMachinePersist<String, String, String> {
 
     private final JdbcWorkflowInstanceRepository workflowInstanceRepository;
     private final Gson gson;
-
-    public JdbcWorkflowStateMachinePersistence(JdbcWorkflowInstanceRepository workflowInstanceRepository, Gson gson) {
-        this.workflowInstanceRepository = workflowInstanceRepository;
-        this.gson = gson;
-    }
 
     @Override
     public void write(StateMachineContext<String, String> stateMachineContext, String referenceId) throws Exception {
