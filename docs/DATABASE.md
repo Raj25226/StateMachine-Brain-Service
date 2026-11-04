@@ -3,6 +3,22 @@
 Every name below is within the `workflow_brain` schema. `workflow_instances`
 keeps its original plural name so existing data and V1 migration stay intact.
 
+Flyway also uses `workflow_brain` as its default and managed schema, placing
+`flyway_schema_history` alongside the application tables. It creates the schema
+before initializing migration history on a fresh database.
+
+For an existing database with history in `public`, stop the application and move
+the existing history table before starting with this configuration:
+
+```sql
+ALTER TABLE public.flyway_schema_history SET SCHEMA workflow_brain;
+```
+
+Run this only when the history table exists in `public` and there is no history
+table in `workflow_brain`. If both exist, reconcile their migration records before
+proceeding. Preserve the applied migrations; do not baseline or rerun them to
+change the history table's schema.
+
 ## Definition tables: shared rules
 
 | Table | Key columns and relationships |

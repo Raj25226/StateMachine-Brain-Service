@@ -1,13 +1,15 @@
 package com.example.statemachine.exception;
 
+import com.example.statemachine.constants.ApiErrorConstants;
+import com.example.statemachine.constants.RequestAttributeConstants;
+import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.api.ApiError;
-import com.example.statemachine.dto.api.RequestMetadata;
-import com.example.statemachine.dto.api.Response;
-import com.example.statemachine.dto.api.ResponseMetadata;
-import com.example.statemachine.logging.WorkflowRequestLoggingFilter;
+import com.example.statemachine.dto.api.WorkflowCommandMetadata;
+import com.example.statemachine.dto.api.WorkflowResponse;
+import com.example.statemachine.dto.api.WorkflowResponseMetadata;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.time.Instant;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,63 +19,78 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import java.time.Instant;
 
 @RestControllerAdvice
+@Slf4j
 public class WorkflowExceptionHandler {
 
-    public static final String METADATA_ATTRIBUTE = WorkflowExceptionHandler.class.getName() + ".metadata";
-    private static final Logger LOG = LoggerFactory.getLogger(WorkflowExceptionHandler.class);
+    @ExceptionHandler(WorkflowException.class)
+    public ResponseEntity<WorkflowResponse> handleWorkflowException(WorkflowException workflowException, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, workflowException.status(), workflowException.code(), workflowException.getMessage());
+    }
+
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ResponseEntity<WorkflowResponse> handleDuplicateKey(DuplicateKeyException exception, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, HttpStatus.CONFLICT, ApiErrorConstants.WORKFLOW_ALREADY_EXISTS,
+                "This referenceId already has a workflow.");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<WorkflowResponse> handleUnreadableMessage(
+            HttpMessageNotReadableException exception, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, HttpStatus.BAD_REQUEST, ApiErrorConstants.INVALID_REQUEST,
+                "Provide a valid JSON request body.");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<WorkflowResponse> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException exception, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, HttpStatus.UNSUPPORTED_MEDIA_TYPE, ApiErrorConstants.INVALID_REQUEST,
+                "Use Content-Type application/json.");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<WorkflowResponse> handleUnsupportedMethod(
+            HttpRequestMethodNotSupportedException exception, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, HttpStatus.METHOD_NOT_ALLOWED, ApiErrorConstants.INVALID_REQUEST,
+                "Use POST /api/workflows.");
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<WorkflowResponse> handleResourceNotFound(
+            NoResourceFoundException exception, HttpServletRequest httpRequest) {
+        return buildRejectedResponse(httpRequest, HttpStatus.NOT_FOUND, ApiErrorConstants.ENDPOINT_NOT_FOUND, "Endpoint not found.");
+    }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Response> handle(Exception ex, HttpServletRequest request) {
-        HttpStatus status;
-        String code;
-        String message;
-        if (ex instanceof WorkflowFailure failure) {
-            status = failure.status();
-            code = failure.code();
-            message = failure.getMessage();
-        } else if (ex instanceof DuplicateKeyException) {
-            status = HttpStatus.CONFLICT;
-            code = "WORKFLOW_ALREADY_EXISTS";
-            message = "This referenceId already has a workflow.";
-        } else if (ex instanceof HttpMessageNotReadableException) {
-            status = HttpStatus.BAD_REQUEST;
-            code = "INVALID_REQUEST";
-            message = "Provide a valid JSON request body.";
-        } else if (ex instanceof HttpMediaTypeNotSupportedException) {
-            status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
-            code = "INVALID_REQUEST";
-            message = "Use Content-Type application/json.";
-        } else if (ex instanceof HttpRequestMethodNotSupportedException) {
-            status = HttpStatus.METHOD_NOT_ALLOWED;
-            code = "INVALID_REQUEST";
-            message = "Use POST /api/workflows.";
-        } else if (ex instanceof NoResourceFoundException) {
-            status = HttpStatus.NOT_FOUND;
-            code = "ENDPOINT_NOT_FOUND";
-            message = "Endpoint not found.";
-        } else {
-            status = HttpStatus.INTERNAL_SERVER_ERROR;
-            code = "INTERNAL_ERROR";
-            message = "An unexpected error occurred.";
-            LOG.error("Workflow request failed", ex);
-        }
-        RequestMetadata m = (RequestMetadata) request.getAttribute(METADATA_ATTRIBUTE);
-        ResponseMetadata metadata =
-                new ResponseMetadata(
-                        m == null ? null : m.operation(),
-                        m == null ? null : m.requestId(),
-                        m == null ? null : m.referenceId(),
-                        m == null ? null : m.event(),
-                        m == null ? null : m.idempotencyKey(),
-                        m == null ? null : m.workflowKey(),
-                        "FAILED",
+    public ResponseEntity<WorkflowResponse> handleUnexpectedException(Exception exception, HttpServletRequest httpRequest) {
+        log.error("workflow_request_failed errorCode=INTERNAL_ERROR", exception);
+        return buildErrorResponse(httpRequest, HttpStatus.INTERNAL_SERVER_ERROR, ApiErrorConstants.INTERNAL_ERROR,
+                "An unexpected error occurred.");
+    }
+
+    private ResponseEntity<WorkflowResponse> buildRejectedResponse(
+            HttpServletRequest httpRequest, HttpStatus httpStatus, String errorCode, String errorDescription) {
+        log.warn("workflow_request_rejected status={} errorCode={}", httpStatus.value(), errorCode);
+        return buildErrorResponse(httpRequest, httpStatus, errorCode, errorDescription);
+    }
+
+    private ResponseEntity<WorkflowResponse> buildErrorResponse(
+            HttpServletRequest httpRequest, HttpStatus httpStatus, String errorCode, String errorDescription) {
+        WorkflowCommandMetadata requestMetadata = (WorkflowCommandMetadata) httpRequest.getAttribute(RequestAttributeConstants.METADATA_ATTRIBUTE);
+        WorkflowResponseMetadata responseMetadata =
+                new WorkflowResponseMetadata(
+                        requestMetadata == null ? null : requestMetadata.operation(),
+                        requestMetadata == null ? null : requestMetadata.requestId(),
+                        requestMetadata == null ? null : requestMetadata.referenceId(),
+                        requestMetadata == null ? null : requestMetadata.event(),
+                        requestMetadata == null ? null : requestMetadata.idempotencyKey(),
+                        requestMetadata == null ? null : requestMetadata.workflowKey(),
+                        WorkflowConstants.STATUS_FAILED,
                         Instant.now(),
                         null);
-        Response body = new Response(metadata, null, new ApiError(code, message));
-        request.setAttribute(WorkflowRequestLoggingFilter.RESPONSE_ATTRIBUTE, body);
-        return ResponseEntity.status(status).body(body);
+        WorkflowResponse errorResponse = new WorkflowResponse(responseMetadata, null, new ApiError(errorCode, errorDescription));
+        httpRequest.setAttribute(RequestAttributeConstants.RESPONSE_ATTRIBUTE, errorResponse);
+        return ResponseEntity.status(httpStatus).body(errorResponse);
     }
 }

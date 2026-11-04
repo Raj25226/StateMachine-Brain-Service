@@ -54,9 +54,17 @@ JSON keys, trailing JSON, nulls and inappropriate fields are rejected.
 | GET_STATE | operation, requestId, referenceId | None | 200 |
 | SUBMIT_EVENT | operation, requestId, referenceId, event, idempotencyKey | — | 200 |
 
-Names are case sensitive. requestId and idempotencyKey are nonblank strings up to
-128 characters. referenceId and workflowKey allow 100 characters; event allows
-100. One reference identifies one workflow instance in this application.
+Names are case sensitive. Supported operations are CREATE, GET_STATE and
+SUBMIT_EVENT. Required fields must be nonblank strings. requestId and
+idempotencyKey are opaque caller-supplied tokens. referenceId identifies one
+workflow instance; PAN, mobile and email format validation is intentionally
+pending. Event codes and workflow keys are checked against database definitions.
+Error-response metadata extraction copies caller values without validation.
+
+Request validation does not impose string-length rules. Database storage still
+limits referenceId/workflowKey/event to 100 characters and requestId/idempotencyKey
+to 128 where persisted. These storage constraints must be revisited when defining
+reference formats; oversized persisted values currently result in a database error.
 
 ### Create
 
@@ -141,8 +149,17 @@ guarantee that a guard will permit the event.
 
 ## Database layout
 
-All tables are in the `workflow_brain` schema. See [docs/DATABASE.md](docs/DATABASE.md)
-for columns, relationships and SQL queries.
+Runtime JDBC queries are defined in `src/main/resources/sql-queries.yml`.
+Repositories look them up through `SqlQueryFunction.GET_QUERY` using
+`SqlQueryConstants` parent groups and query suffixes, for example
+`SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT,
+SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID)`. The catalog is loaded once from the classpath; missing
+or blank query keys fail explicitly. Named SQL parameters still use JDBC bindings.
+Flyway schema changes remain in `src/main/resources/db/migration`.
+
+All tables, including Flyway's `flyway_schema_history`, use the `workflow_brain`
+schema. See [docs/DATABASE.md](docs/DATABASE.md) for columns, relationships, SQL
+queries and moving existing Flyway history from `public` before startup.
 
 | Table | Stores |
 | --- | --- |
@@ -174,7 +191,7 @@ silently accept an unknown schema.
 WorkflowController -> WorkflowRequestValidator -> WorkflowCommandGateway
   -> WorkflowExecutionService -> StateMachineFactory
        -> JdbcWorkflowModelFactory -> JdbcWorkflowDefinitionRepository
-       -> DefaultStateMachinePersister -> JdbcStateMachinePersist
+       -> DefaultStateMachinePersister -> JdbcWorkflowStateMachinePersistence
                                         -> JdbcWorkflowInstanceRepository
 ```
 
@@ -251,7 +268,13 @@ WorkflowRequestLoggingFilter uses SLF4J for /api/ requests. It logs receipt,
 requestId, referenceId, operation/event, HTTP status, resulting state, event
 outcome, idempotency replay, error code and duration. Exceptions retain stack
 traces on the server. Raw request/response bodies, OTPs and document contents
-are not logged. Metadata is bounded and control characters are sanitized.
+are not logged. Metadata is bounded and control characters are sanitized. SLF4J INFO logs capture
+startup and completed HTTP requests; WARN logs identify rejected requests, and
+unexpected failures include server-side stack traces at ERROR. Detailed state,
+event, deferred-event and retry processing is logged at DEBUG. Enable it with
+`logging.level.com.example.statemachine=DEBUG` when troubleshooting. DEBUG
+processing logs may precede a transaction rollback; the HTTP completion log
+reports the final request result.
 
 Every API response carries X-Correlation-Id, a server-generated UUID for the
 HTTP attempt. It is separate from the caller's requestId and idempotencyKey.
@@ -275,6 +298,8 @@ workflow_http_completed correlationId=... requestId=req-101 referenceId=APP-101 
 - persistence: JDBC context, instance, retry and history repositories.
 - service: command dispatch, read-only state retrieval and transactional mutations.
 - logging: HTTP correlation and structured request/result summaries.
+- constants: API properties/error codes, workflow identifiers, JDBC keys and request attributes.
+- enums: workflow operation/outcome types and reusable functional strategies for JSON, metadata, fingerprinting and logging.
 
 WorkflowEventProcessor submits one event and returns its previous state, event,
 current state and outcome. It has no HTTP or database responsibility. The existing
@@ -308,7 +333,8 @@ external service, use an outbox or an independently idempotent integration.
 ## Errors and client migration
 
 Failures use the same envelope with payload=null and error.code/description.
-Recoverable request metadata is echoed; malformed JSON may have no metadata.
+Recoverable request metadata is echoed; malformed JSON and POJO binding failures
+may have no metadata. X-Correlation-Id remains available for tracing.
 
 | HTTP | Code | Meaning |
 | --- | --- | --- |
@@ -336,14 +362,17 @@ java -jar target/state-machine-brain-0.0.1-SNAPSHOT.jar
 ```
 
 Set the database environment variables described above before starting the JAR.
-This repository currently does not contain automated test sources; a successful
-package build checks compilation and packaging, not workflow behavior.
+The build runs request binding and validation regression tests, then compiles and
+packages the service. Database transactions, concurrency and state-machine
+execution still need integration tests against PostgreSQL.
 
 ## Swagger and OpenAPI integration
 
-Swagger UI includes request examples for CREATE, GET_STATE and each onboarding
-event, plus response schemas and error codes. Try it out sends real requests to
-the configured database.
+Swagger UI documents the operation-specific request schemas and provides examples
+for CREATE, GET_STATE and every seeded onboarding event. Responses include progress,
+completion, idempotent retries, branching/internal/deferred custom workflows and
+each handled error code. Custom workflow examples are illustrative and are not
+seeded in the database. Try it out sends real requests to the configured database.
 
 For an MCP service or another API integration that supports OpenAPI, use the
 machine-readable schema at `/v3/api-docs` (JSON) or `/v3/api-docs.yaml` (YAML).

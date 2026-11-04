@@ -1,9 +1,16 @@
 package com.example.statemachine.statemachine;
 
-import com.example.statemachine.dto.workflow.ActionBinding;
-import com.example.statemachine.dto.workflow.State;
+import com.example.statemachine.constants.WorkflowConstants;
+import com.example.statemachine.dto.workflow.DeferredWorkflowEvent;
+import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
+import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
+import com.example.statemachine.dto.workflow.WorkflowTransitionDefinition;
+import com.example.statemachine.enums.LogValueSanitizerFunction;
 import com.example.statemachine.repository.JdbcWorkflowDefinitionRepository;
+import java.util.*;
+import java.util.function.Function;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.config.model.DefaultStateMachineModel;
 import org.springframework.statemachine.config.model.StateData;
@@ -14,14 +21,10 @@ import org.springframework.statemachine.config.model.TransitionData;
 import org.springframework.statemachine.config.model.TransitionsData;
 import org.springframework.statemachine.transition.TransitionKind;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
-import java.util.function.Function;
-import com.example.statemachine.dto.workflow.Transition;
-import com.example.statemachine.dto.workflow.DeferredEvent;
+import reactor.core.publisher.Mono;
 
-import java.util.*;
-
+@Slf4j
 @Component
 public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String, String> {
 
@@ -47,35 +50,35 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
         List<StateData<String, String>> states =
                 workflowDefinition.states().stream()
-                .map( stateDefinition -> {
+                .map( workflowStateDefinition -> {
 
-                            StateData<String, String> state =
-                                new StateData<String, String>(stateDefinition.code(), stateDefinition.initial());
+                            StateData<String, String> stateData =
+                                new StateData<String, String>(workflowStateDefinition.code(), workflowStateDefinition.initial());
 
-                            state.setEnd(stateDefinition.terminal());
-                            state.setEntryActions(resolveStateActions(stateDefinition, "ENTRY"));
-                            state.setExitActions(resolveStateActions(stateDefinition, "EXIT"));
-                            state.setStateActions(resolveStateActions(stateDefinition, "STATE"));
-                            state.setDeferred(
+                            stateData.setEnd(workflowStateDefinition.terminal());
+                            stateData.setEntryActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_ENTRY));
+                            stateData.setExitActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_EXIT));
+                            stateData.setStateActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_STATE));
+                            stateData.setDeferred(
                                     workflowDefinition.deferredEvents().stream()
-                                            .filter(d -> d.state().equals(stateDefinition.code()))
+                                            .filter(deferredEvent -> deferredEvent.state().equals(workflowStateDefinition.code()))
                                             .map(deferredEvent -> deferredEvent.event())
                                             .toList()
                             );
-                            return state;
+                            return stateData;
                         }
                 )
                 .toList();
 
         List<TransitionData<String, String>> transitions =
                 workflowDefinition.transitions().stream()
-                .map( transition -> new TransitionData<String, String>(
-                        transition.source(),
-                        transition.target(),
-                        transition.event(),
-                        resolveTransitionActions(transition.actions()),
-                        transition.guard() == null ? null : resolveGuardWithErrorHandling(transition.guard()),
-                        TransitionKind.valueOf(transition.kind())
+                .map( workflowTransition -> new TransitionData<String, String>(
+                        workflowTransition.source(),
+                        workflowTransition.target(),
+                        workflowTransition.event(),
+                        resolveTransitionActions(workflowTransition.actions()),
+                        workflowTransition.guard() == null ? null : resolveGuardWithErrorHandling(workflowTransition.guard()),
+                        TransitionKind.valueOf(workflowTransition.kind())
                     )
                 )
                 .toList();
@@ -88,112 +91,115 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
     }
 
     private Collection<Function<StateContext<String, String>, Mono<Void>>> resolveStateActions(
-            State state, String phase) {
+            WorkflowStateDefinition stateDefinition, String actionPhase) {
 
-        List<Function<StateContext<String, String>, Mono<Void>>> orderedAction =
-                state.actions().stream()
-                .filter(action -> action.phase().equals(phase))
-                .sorted(Comparator.comparingInt(ActionBinding::order))
-                .map(action -> resolveActionWithErrorHandling(action.code()))
+        List<Function<StateContext<String, String>, Mono<Void>>> orderedActions =
+                stateDefinition.actions().stream()
+                .filter(actionBinding -> actionBinding.phase().equals(actionPhase))
+                .sorted(Comparator.comparingInt(WorkflowActionBinding::order))
+                .map(actionBinding -> resolveActionWithErrorHandling(actionBinding.code()))
                 .toList();
 
-        return orderedAction.isEmpty()
+        return orderedActions.isEmpty()
                 ? List.of()
-                : List.of( context ->
-                            Flux.fromIterable(orderedAction)
-                            .concatMap(action -> action.apply(context))
+                : List.of( stateContext ->
+                            Flux.fromIterable(orderedActions)
+                            .concatMap(actionFunction -> actionFunction.apply(stateContext))
                             .then()
                 );
     }
 
     private Collection<Function<StateContext<String, String>, Mono<Void>>> resolveTransitionActions(
-            List<String> codes) {
+            List<String> actionCodes) {
 
-        List<Function<StateContext<String, String>, Mono<Void>>> ordered =
-                codes.stream()
-                .map(code -> resolveActionWithErrorHandling(code))
+        List<Function<StateContext<String, String>, Mono<Void>>> orderedActions =
+                actionCodes.stream()
+                .map(behaviorCode -> resolveActionWithErrorHandling(behaviorCode))
                 .toList();
 
-        return ordered.isEmpty()
+        return orderedActions.isEmpty()
                 ? List.of()
-                : List.of( context ->
-                        Flux.fromIterable(ordered)
-                        .concatMap(action -> action.apply(context))
+                : List.of( stateContext ->
+                        Flux.fromIterable(orderedActions)
+                        .concatMap(actionFunction -> actionFunction.apply(stateContext))
                         .then()
                 );
     }
 
-    private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(String code) {
+    private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(String behaviorCode) {
 
-        Function<StateContext<String, String>, Mono<Void>> action = behaviorRegistry.resolveAction(code);
-        return context -> Mono.defer(() -> action.apply(context))
+        Function<StateContext<String, String>, Mono<Void>> actionFunction = behaviorRegistry.resolveAction(behaviorCode);
+        return stateContext -> Mono.defer(() -> actionFunction.apply(stateContext))
                 .doOnError(
-                        error ->
-                        context.getStateMachine()
-                        .setStateMachineError(new IllegalStateException("Workflow action failed: " + code, error))
+                        error -> {
+                            log.error("workflow_action_failed action={}", LogValueSanitizerFunction.SANITIZE.apply(behaviorCode), error);
+                            stateContext.getStateMachine().setStateMachineError(
+                                    new IllegalStateException("Workflow action failed: " + behaviorCode, error));
+                        }
                 );
     }
 
-    private Function<StateContext<String, String>, Mono<Boolean>> resolveGuardWithErrorHandling(String code) {
-        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuard(code);
-        return context -> Mono.defer(() -> guard.apply(context))
-                .doOnError( error ->
-                        context.getStateMachine()
-                        .setStateMachineError(new IllegalStateException("Workflow guard failed: " + code, error))
-                );
+    private Function<StateContext<String, String>, Mono<Boolean>> resolveGuardWithErrorHandling(String behaviorCode) {
+        Function<StateContext<String, String>, Mono<Boolean>> guard = behaviorRegistry.resolveGuard(behaviorCode);
+        return stateContext -> Mono.defer(() -> guard.apply(stateContext))
+                .doOnError(error -> {
+                    log.error("workflow_guard_failed guard={}", LogValueSanitizerFunction.SANITIZE.apply(behaviorCode), error);
+                    stateContext.getStateMachine().setStateMachineError(
+                            new IllegalStateException("Workflow guard failed: " + behaviorCode, error));
+                });
     }
 
     private void validateWorkflowStructure(WorkflowDefinition workflowDefinition) {
 
-        if (workflowDefinition.states().stream().filter(State::initial).count() != 1) {
+        if (workflowDefinition.states().stream().filter(WorkflowStateDefinition::initial).count() != 1) {
             throw new IllegalStateException("Workflow must have exactly one initial state.");
         }
 
-        if (workflowDefinition.states().stream().noneMatch(State::terminal)) {
+        if (workflowDefinition.states().stream().noneMatch(WorkflowStateDefinition::terminal)) {
             throw new IllegalStateException("Workflow must have a terminal state.");
         }
 
-        for (Transition transition : workflowDefinition.transitions()) {
-            if (workflowDefinition.getState(transition.source()).terminal()) {
+        for (WorkflowTransitionDefinition workflowTransition : workflowDefinition.transitions()) {
+            if (workflowDefinition.getState(workflowTransition.source()).terminal()) {
                 throw new IllegalStateException("Terminal states cannot have outgoing transitions.");
             }
-            workflowDefinition.getState(transition.target());
+            workflowDefinition.getState(workflowTransition.target());
         }
 
-        Set<String> reachable = new HashSet<String>();
+        Set<String> reachableStates = new HashSet<String>();
 
         //add initial state
-        reachable.add(
+        reachableStates.add(
                 workflowDefinition.states()
                 .stream()
-                .filter(State::initial)
+                .filter(WorkflowStateDefinition::initial)
                 .findFirst()
                 .orElseThrow()
                 .code()
         );
 
-        boolean changed;
+        boolean reachableStatesChanged;
         do {
-            changed = false;
-            for (Transition t : workflowDefinition.transitions()) {
-                if (reachable.contains(t.source())){
-                    changed |= reachable.add(t.target());
+            reachableStatesChanged = false;
+            for (WorkflowTransitionDefinition workflowTransition : workflowDefinition.transitions()) {
+                if (reachableStates.contains(workflowTransition.source())){
+                    reachableStatesChanged |= reachableStates.add(workflowTransition.target());
                 }
             }
-        } while (changed);
+        } while (reachableStatesChanged);
 
-        if (reachable.size() != workflowDefinition.states().size()) {
+        if (reachableStates.size() != workflowDefinition.states().size()) {
             throw new IllegalStateException("Workflow contains unreachable states.");
         }
 
-        for (DeferredEvent deferred : workflowDefinition.deferredEvents()) {
+        for (DeferredWorkflowEvent deferred : workflowDefinition.deferredEvents()) {
 
             if (workflowDefinition.getState(deferred.state()).terminal()) {
                 throw new IllegalStateException("Terminal states cannot defer events.");
             }
 
             if (workflowDefinition.transitions().stream()
-                    .noneMatch(t -> t.event().equals(deferred.event()))) {
+                    .noneMatch(workflowTransition -> workflowTransition.event().equals(deferred.event()))) {
                 throw new IllegalStateException("Deferred event has no transition handler: " + deferred.event());
             }
         }

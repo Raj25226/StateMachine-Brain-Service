@@ -6,14 +6,14 @@ public record WorkflowDefinition(
         String id,
         String workflowKey,
         int version,
-        List<State> states,
-        List<Transition> transitions,
-        List<DeferredEvent> deferredEvents
+        List<WorkflowStateDefinition> states,
+        List<WorkflowTransitionDefinition> transitions,
+        List<DeferredWorkflowEvent> deferredEvents
 ) {
 
-    public State getState(String stateCode) {
+    public WorkflowStateDefinition getState(String stateCode) {
         return states.stream()
-                .filter(s -> s.code().equals(stateCode))
+                .filter(workflowState -> workflowState.code().equals(stateCode))
                 .findFirst()
                 .orElseThrow(
                         () ->  new IllegalStateException("State is missing from the workflow definition: " + stateCode)

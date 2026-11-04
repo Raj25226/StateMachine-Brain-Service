@@ -1,0 +1,76 @@
+# Runtime JDBC queries. Named parameters match DatabaseConstants and repository bindings.
+
+workflow-definition:
+  find-latest-active-id: |
+    SELECT definition_id
+    FROM workflow_brain.workflow_definition
+    WHERE workflow_key = :workflowKey AND status = 'ACTIVE'
+    ORDER BY version DESC
+    LIMIT 1
+  find-metadata: |
+    SELECT workflow_key, version
+    FROM workflow_brain.workflow_definition
+    WHERE definition_id = :definitionId
+  find-state-actions: |
+    SELECT state_code, action_code, phase, execution_order
+    FROM workflow_brain.workflow_state_action
+    WHERE definition_id = :definitionId
+    ORDER BY state_code, phase, execution_order
+  find-states: |
+    SELECT state_code, initial_state, terminal_state
+    FROM workflow_brain.workflow_state
+    WHERE definition_id = :definitionId
+    ORDER BY state_code
+  find-transition-actions: |
+    SELECT transition_action.transition_id, transition_action.action_code
+    FROM workflow_brain.workflow_transition_action transition_action
+    inner join workflow_brain.workflow_transition workflow_transition ON workflow_transition.transition_id = transition_action.transition_id
+    WHERE workflow_transition.definition_id = :definitionId
+    ORDER BY transition_action.transition_id, transition_action.execution_order
+  find-transitions: |
+    SELECT transition_id, source_state, event_code, target_state, transition_kind, guard_code
+    FROM workflow_brain.workflow_transition
+    WHERE definition_id = :definitionId
+    ORDER BY transition_id
+  find-deferred-events: |
+    SELECT state_code, event_code
+    FROM workflow_brain.workflow_deferred_event
+    WHERE definition_id = :definitionId
+    ORDER BY state_code, event_code
+
+transition-history:
+  insert: |
+    INSERT INTO workflow_brain.workflow_transition_history
+    (reference_id, definition_id, source_state, event_code, target_state, request_id, idempotency_key)
+    VALUES (:referenceId, :definitionId, :sourceState, :event, :targetState, :requestId, :idempotencyKey)
+
+idempotency:
+  exists-by-key: |
+    SELECT COUNT(*) > 0
+    FROM workflow_brain.workflow_request_replay
+    WHERE idempotency_key = :key
+  reserve-key: |
+    INSERT INTO workflow_brain.workflow_request_replay (idempotency_key, request_fingerprint)
+    VALUES (:key, :fingerprint)
+  find-and-lock-by-key: |
+    SELECT request_fingerprint, response_json, http_status
+    FROM workflow_brain.workflow_request_replay
+    WHERE idempotency_key = :key FOR UPDATE
+  save-successful-response: |
+    UPDATE workflow_brain.workflow_request_replay SET response_json = :response,
+    http_status = :status, completed_at = CURRENT_TIMESTAMP WHERE idempotency_key = :key
+
+workflow-instance:
+  insert: |
+    INSERT INTO workflow_brain.workflow_instances (reference_id, definition_id, current_state)
+    VALUES (:reference, :definition, :state)
+  find-and-lock-by-reference: |
+    SELECT reference_id, definition_id, current_state, machine_context, context_format_version
+    FROM workflow_brain.workflow_instances WHERE reference_id = :reference
+    FOR UPDATE
+  find-by-reference: |
+    SELECT reference_id, definition_id, current_state, machine_context, context_format_version
+    FROM workflow_brain.workflow_instances WHERE reference_id = :reference
+  update-context: |
+    UPDATE workflow_brain.workflow_instances SET current_state = :state, machine_context = :context,
+    context_format_version = 1, updated_at = CURRENT_TIMESTAMP WHERE reference_id = :reference

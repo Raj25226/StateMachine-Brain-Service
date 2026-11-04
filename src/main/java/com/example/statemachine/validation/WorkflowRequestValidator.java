@@ -1,100 +1,59 @@
 package com.example.statemachine.validation;
 
-import com.example.statemachine.dto.workflow.Command;
+import com.example.statemachine.constants.ApiPropertyConstants;
+import com.example.statemachine.constants.WorkflowConstants;
+import com.example.statemachine.dto.api.WorkflowCommandMetadata;
+import com.example.statemachine.dto.api.WorkflowRequest;
+import com.example.statemachine.dto.api.WorkflowRequestMetadata;
+import com.example.statemachine.dto.workflow.WorkflowCommand;
+import com.example.statemachine.enums.RequestMetadataValidationConsumer;
 import com.example.statemachine.enums.WorkflowOperation;
-import com.example.statemachine.dto.api.RequestMetadata;
-import com.example.statemachine.exception.WorkflowFailure;
-
+import com.example.statemachine.enums.WorkflowOperationParserFunction;
+import com.example.statemachine.exception.WorkflowException;
 import org.springframework.stereotype.Component;
-
-import tools.jackson.databind.JsonNode;
-
-import java.util.Set;
 
 @Component
 public class WorkflowRequestValidator {
 
-    public Command validate(JsonNode body) {
-        object(body, "request");
-        validateAllowedFields(body, Set.of("metadata", "payload"), "request");
-
-        JsonNode metadata = body.get("metadata");
-        object(metadata, "metadata");
-
-        validateAllowedFields(metadata, Set.of("operation", "requestId", "referenceId", "event", "idempotencyKey", "workflowKey"), "metadata");
-
-        String name = validateAndGet(metadata, "operation", 32);
-        validateAndGet(metadata, "requestId", 128);
-        validateAndGet(metadata, "referenceId", 100);
-
-        WorkflowOperation operation;
-        try {
-            operation = WorkflowOperation.valueOf(name);
-        } catch (IllegalArgumentException ex) {
-            throw WorkflowFailure.invalid("operation must be CREATE, GET_STATE or SUBMIT_EVENT.");
+    public WorkflowCommand validate(WorkflowRequest request) {
+        if (request == null || request.metadata() == null) {
+            throw WorkflowException.invalid(ApiPropertyConstants.METADATA + " must be a JSON object.");
+        }
+        if (request.payload() == null) {
+            throw WorkflowException.invalid(ApiPropertyConstants.PAYLOAD + " must be an empty JSON object.");
         }
 
-        if (operation == WorkflowOperation.SUBMIT_EVENT)
-            validateAndGet(metadata, "event", 100);
-        else
-            rejectField(metadata, "event");
+        WorkflowRequestMetadata metadata = request.metadata();
+        WorkflowOperation operation = WorkflowOperationParserFunction.PARSE.apply(metadata.getOperation());
+        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getRequestId(), ApiPropertyConstants.REQUEST_ID);
+        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getReferenceId(), ApiPropertyConstants.REFERENCE_ID);
+        // TODO: Add PAN, mobile or email validation once supported reference types are defined.
 
-        if (operation == WorkflowOperation.CREATE) {
-            if (metadata.has("workflowKey"))
-                validateAndGet(metadata, "workflowKey", 100);
-        } else {
-            rejectField(metadata, "workflowKey");
+        switch (operation) {
+            case CREATE -> {
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+                if (metadata.getWorkflowKey() != null) {
+                    RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+                }
+            }
+            case GET_STATE -> {
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+            }
+            case SUBMIT_EVENT -> {
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+            }
         }
 
-        if (operation == WorkflowOperation.GET_STATE) {
-            rejectField(metadata, "idempotencyKey");
-        } else {
-            validateAndGet(metadata, "idempotencyKey", 128);
-        }
-
-        object(body.get("payload"), "payload");
-        validateAllowedFields(body.get("payload"), Set.of(), "payload");
-
-        RequestMetadata recovered = extractMetadataForErrorResponse(body);
-
-        return new Command(new RequestMetadata(recovered.operation(), recovered.requestId(), recovered.referenceId(), recovered.event(), recovered.idempotencyKey(), operation == WorkflowOperation.CREATE ? (recovered.workflowKey() == null ? "onboarding" : recovered.workflowKey()) : null), operation);
-    }
-
-    public RequestMetadata extractMetadataForErrorResponse(JsonNode body) {
-
-        JsonNode m = (body == null) ? null : body.get("metadata");
-
-        if (m == null || !m.isObject()) return null;
-        return new RequestMetadata(text(m, "operation", 32), text(m, "requestId", 128), text(m, "referenceId", 100), text(m, "event", 100), text(m, "idempotencyKey", 128), text(m, "workflowKey", 100));
-    }
-
-    private String text(JsonNode m, String name, int limit) {
-        JsonNode value = m.get(name);
-        return (value != null && value.isString() && value.asString().length() <= limit) ? value.asString() : null;
-    }
-
-    private String validateAndGet(JsonNode m, String name, int limit) {
-
-        String value = text(m, name, limit);
-
-        if (value == null || value.isBlank())
-            throw WorkflowFailure.invalid("metadata." + name + " must be a nonblank string of at most " + limit + " characters.");
-        return value;
-    }
-
-    private void rejectField(JsonNode m, String name) {
-        if (m.has(name)) {
-            throw WorkflowFailure.invalid("metadata." + name + " is not allowed for this operation.");
-        }
-    }
-
-    private void object(JsonNode node, String name) {
-        if (node == null || !node.isObject()) throw WorkflowFailure.invalid(name + " must be a JSON object.");
-    }
-
-    private void validateAllowedFields(JsonNode node, Set<String> allowed, String path) {
-        node.propertyNames().forEach(name -> {
-            if (!allowed.contains(name)) throw WorkflowFailure.invalid("Unsupported field: " + path + "." + name);
-        });
+        String workflowKey = operation == WorkflowOperation.CREATE
+                ? (metadata.getWorkflowKey() == null ? WorkflowConstants.DEFAULT_WORKFLOW_KEY : metadata.getWorkflowKey())
+                : null;
+        return new WorkflowCommand(new WorkflowCommandMetadata(
+                metadata.getOperation(), metadata.getRequestId(), metadata.getReferenceId(),
+                metadata.getEvent(), metadata.getIdempotencyKey(), workflowKey), operation);
     }
 }

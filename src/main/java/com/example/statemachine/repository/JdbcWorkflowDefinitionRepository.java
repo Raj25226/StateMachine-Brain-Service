@@ -1,20 +1,24 @@
 package com.example.statemachine.repository;
 
+import com.example.statemachine.constants.SqlQueryConstants;
+import com.example.statemachine.enums.SqlQueryFunction;
+import com.example.statemachine.constants.ApiErrorConstants;
+import com.example.statemachine.constants.DatabaseConstants;
+import com.example.statemachine.dto.persistence.WorkflowDefinitionMetadata;
+import com.example.statemachine.dto.workflow.DeferredWorkflowEvent;
+import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
-import com.example.statemachine.dto.persistence.DefinitionInfo;
-import com.example.statemachine.dto.workflow.ActionBinding;
-import com.example.statemachine.dto.workflow.DeferredEvent;
-import com.example.statemachine.dto.workflow.State;
-import com.example.statemachine.dto.workflow.Transition;
-import com.example.statemachine.exception.WorkflowFailure;
-import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.RowCallbackHandler;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Repository;
+import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
+import com.example.statemachine.dto.workflow.WorkflowTransitionDefinition;
+import com.example.statemachine.exception.WorkflowException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.RowCallbackHandler;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcWorkflowDefinitionRepository {
@@ -26,24 +30,18 @@ public class JdbcWorkflowDefinitionRepository {
     }
 
     public String findLatestActiveDefinitionId(String workflowKey) {
-        final String sql = """
-                SELECT definition_id
-                FROM workflow_brain.workflow_definition
-                WHERE workflow_key = :workflowKey AND status = 'ACTIVE'
-                ORDER BY version DESC
-                LIMIT 1
-                """;
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID);
 
-        final Map<String, ?> parameters = Map.of("workflowKey", workflowKey);
+        final Map<String, ?> parameters = Map.of(DatabaseConstants.PARAM_WORKFLOW_KEY, workflowKey);
 
-        final List<String> definitionIds = jdbcTemplate.query(sql, parameters, (resultSet, rowNum) -> {
-            return resultSet.getString("definition_id");
+        final List<String> definitionIds = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
+            return resultSet.getString(DatabaseConstants.COLUMN_DEFINITION_ID);
         });
 
         if (definitionIds.isEmpty()) {
-            throw new WorkflowFailure(
+            throw new WorkflowException(
                     HttpStatus.NOT_FOUND,
-                    "WORKFLOW_DEFINITION_NOT_FOUND",
+                    ApiErrorConstants.WORKFLOW_DEFINITION_NOT_FOUND,
                     "No active workflow definition exists for " + workflowKey + "."
             );
         }
@@ -52,167 +50,133 @@ public class JdbcWorkflowDefinitionRepository {
     }
 
     public WorkflowDefinition loadWorkflowDefinition(String definitionId) {
-        final Map<String, ?> parameters = Map.of("definitionId", definitionId);
+        final Map<String, ?> parameters = Map.of(DatabaseConstants.PARAM_DEFINITION_ID, definitionId);
 
-        final DefinitionInfo definitionInfo = loadDefinitionInfo(definitionId, parameters);
-        final Map<String, List<ActionBinding>> stateActions = loadStateActions(parameters);
-        final List<State> states = loadStates(parameters, stateActions);
+        final WorkflowDefinitionMetadata definitionMetadata = loadDefinitionInfo(definitionId, parameters);
+        final Map<String, List<WorkflowActionBinding>> stateActions = loadStateActions(parameters);
+        final List<WorkflowStateDefinition> states = loadStates(parameters, stateActions);
         final Map<String, List<String>> transitionActions = loadTransitionActions(parameters);
-        final List<Transition> transitions = loadTransitions(parameters, transitionActions);
-        final List<DeferredEvent> deferredEvents = loadDeferredEvents(parameters);
+        final List<WorkflowTransitionDefinition> transitions = loadTransitions(parameters, transitionActions);
+        final List<DeferredWorkflowEvent> deferredEvents = loadDeferredEvents(parameters);
 
         return new WorkflowDefinition(
                 definitionId,
-                definitionInfo.workflowKey(),
-                definitionInfo.version(),
+                definitionMetadata.workflowKey(),
+                definitionMetadata.version(),
                 states,
                 transitions,
                 deferredEvents
         );
     }
 
-    private DefinitionInfo loadDefinitionInfo(String definitionId, Map<String, ?> parameters) {
-        final String sql = """
-                SELECT workflow_key, version
-                FROM workflow_brain.workflow_definition
-                WHERE definition_id = :definitionId
-                """;
+    private WorkflowDefinitionMetadata loadDefinitionInfo(String definitionId, Map<String, ?> parameters) {
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFINITION_METADATA);
 
-        final List<DefinitionInfo> definitions = jdbcTemplate.query(sql, parameters, (resultSet, rowNum) -> {
-            return new DefinitionInfo(
-                    resultSet.getString("workflow_key"),
-                    resultSet.getInt("version")
+        final List<WorkflowDefinitionMetadata> definitionMetadataRows = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
+            return new WorkflowDefinitionMetadata(
+                    resultSet.getString(DatabaseConstants.COLUMN_WORKFLOW_KEY),
+                    resultSet.getInt(DatabaseConstants.COLUMN_VERSION)
             );
         });
 
-        if (definitions.isEmpty()) {
+        if (definitionMetadataRows.isEmpty()) {
             throw new IllegalStateException("Workflow definition not found: " + definitionId);
         }
 
-        return definitions.getFirst();
+        return definitionMetadataRows.getFirst();
     }
 
+    private Map<String, List<WorkflowActionBinding>> loadStateActions(Map<String, ?> parameters) {
 
-    private Map<String, List<ActionBinding>> loadStateActions(Map<String, ?> parameters) {
+        String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATE_ACTIONS);
 
-        String sql = """
-            SELECT state_code, action_code, phase, execution_order
-            FROM workflow_brain.workflow_state_action
-            WHERE definition_id = :definitionId
-            ORDER BY state_code, phase, execution_order
-            """;
+        Map<String, List<WorkflowActionBinding>> actionsByState = new HashMap<>();
 
-        Map<String, List<ActionBinding>> actionsByState = new HashMap<>();
+        RowCallbackHandler rowCallbackHandler = resultSet -> {
 
-        RowCallbackHandler rowHandler = resultSet -> {
-
-            String stateCode = resultSet.getString("state_code");
-            ActionBinding actionBinding =
-                    new ActionBinding(
-                        resultSet.getString("action_code"),
-                        resultSet.getString("phase"),
-                        resultSet.getInt("execution_order")
+            String stateCode = resultSet.getString(DatabaseConstants.COLUMN_STATE_CODE);
+            WorkflowActionBinding actionBinding =
+                    new WorkflowActionBinding(
+                        resultSet.getString(DatabaseConstants.COLUMN_ACTION_CODE),
+                        resultSet.getString(DatabaseConstants.COLUMN_PHASE),
+                        resultSet.getInt(DatabaseConstants.COLUMN_EXECUTION_ORDER)
                     );
 
-            List<ActionBinding> stateActions = actionsByState.computeIfAbsent(stateCode, key -> new ArrayList<>());
+            List<WorkflowActionBinding> stateActions = actionsByState.computeIfAbsent(stateCode, key -> new ArrayList<>());
             stateActions.add(actionBinding);
         };
 
-        jdbcTemplate.query(sql, parameters, rowHandler);
+        jdbcTemplate.query(sql, parameters, rowCallbackHandler);
 
         return actionsByState;
     }
 
-    private List<State> loadStates(Map<String, ?> parameters, Map<String, List<ActionBinding>> actionsByState) {
-        final String sql = """
-                SELECT state_code, initial_state, terminal_state
-                FROM workflow_brain.workflow_state
-                WHERE definition_id = :definitionId
-                ORDER BY state_code
-                """;
+    private List<WorkflowStateDefinition> loadStates(Map<String, ?> parameters, Map<String, List<WorkflowActionBinding>> actionsByState) {
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_STATES);
 
-        List<State> stateList = jdbcTemplate.query(sql, parameters, (resultSet, rowNum) -> {
-            final String stateCode = resultSet.getString("state_code");
-            final List<ActionBinding> actions = List.copyOf(actionsByState.getOrDefault(stateCode, List.of()));
+        List<WorkflowStateDefinition> stateDefinitions = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
+            final String stateCode = resultSet.getString(DatabaseConstants.COLUMN_STATE_CODE);
+            final List<WorkflowActionBinding> actions = List.copyOf(actionsByState.getOrDefault(stateCode, List.of()));
 
-            return new State(
+            return new WorkflowStateDefinition(
                     stateCode,
-                    resultSet.getBoolean("initial_state"),
-                    resultSet.getBoolean("terminal_state"),
+                    resultSet.getBoolean(DatabaseConstants.COLUMN_INITIAL_STATE),
+                    resultSet.getBoolean(DatabaseConstants.COLUMN_TERMINAL_STATE),
                     actions
             );
         });
-        return stateList;
+        return stateDefinitions;
     }
-
 
     private Map<String, List<String>> loadTransitionActions(Map<String, ?> parameters) {
 
-        String sql = """
-            SELECT transition_action.transition_id, transition_action.action_code
-            FROM workflow_brain.workflow_transition_action transition_action
-            inner join workflow_brain.workflow_transition workflow_transition ON workflow_transition.transition_id = transition_action.transition_id
-            WHERE workflow_transition.definition_id = :definitionId
-            ORDER BY transition_action.transition_id, transition_action.execution_order
-            """;
+        String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITION_ACTIONS);
 
         Map<String, List<String>> actionsByTransition = new HashMap<>();
 
-        RowCallbackHandler rowHandler = resultSet -> {
-            String transitionId = resultSet.getString("transition_id");
-            String actionCode = resultSet.getString("action_code");
+        RowCallbackHandler rowCallbackHandler = resultSet -> {
+            String transitionId = resultSet.getString(DatabaseConstants.COLUMN_TRANSITION_ID);
+            String actionCode = resultSet.getString(DatabaseConstants.COLUMN_ACTION_CODE);
 
             List<String> actionCodes = actionsByTransition.computeIfAbsent(transitionId, key -> new ArrayList<>());
             actionCodes.add(actionCode);
         };
 
-        jdbcTemplate.query(sql, parameters, rowHandler);
+        jdbcTemplate.query(sql, parameters, rowCallbackHandler);
 
         return actionsByTransition;
     }
 
+    private List<WorkflowTransitionDefinition> loadTransitions(Map<String, ?> parameters, Map<String, List<String>> actionsByTransition) {
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS);
 
-    private List<Transition> loadTransitions(Map<String, ?> parameters, Map<String, List<String>> actionsByTransition) {
-        final String sql = """
-                SELECT transition_id, source_state, event_code, target_state, transition_kind, guard_code
-                FROM workflow_brain.workflow_transition
-                WHERE definition_id = :definitionId
-                ORDER BY transition_id
-                """;
-
-        List<Transition> transitionList = jdbcTemplate.query(sql, parameters, (resultSet, rowNum) -> {
-            String transitionId = resultSet.getString("transition_id");
+        List<WorkflowTransitionDefinition> transitionDefinitions = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
+            String transitionId = resultSet.getString(DatabaseConstants.COLUMN_TRANSITION_ID);
             List<String> transitionActions = List.copyOf(actionsByTransition.getOrDefault(transitionId, List.of()));
 
-            return new Transition(
+            return new WorkflowTransitionDefinition(
                     transitionId,
-                    resultSet.getString("source_state"),
-                    resultSet.getString("event_code"),
-                    resultSet.getString("target_state"),
-                    resultSet.getString("transition_kind"),
-                    resultSet.getString("guard_code"),
+                    resultSet.getString(DatabaseConstants.COLUMN_SOURCE_STATE),
+                    resultSet.getString(DatabaseConstants.COLUMN_EVENT_CODE),
+                    resultSet.getString(DatabaseConstants.COLUMN_TARGET_STATE),
+                    resultSet.getString(DatabaseConstants.COLUMN_TRANSITION_KIND),
+                    resultSet.getString(DatabaseConstants.COLUMN_GUARD_CODE),
                     transitionActions
             );
         });
 
-        return transitionList;
+        return transitionDefinitions;
     }
 
-    private List<DeferredEvent> loadDeferredEvents(Map<String, ?> parameters) {
-        String sql = """
-                SELECT state_code, event_code
-                FROM workflow_brain.workflow_deferred_event
-                WHERE definition_id = :definitionId
-                ORDER BY state_code, event_code
-                """;
+    private List<DeferredWorkflowEvent> loadDeferredEvents(Map<String, ?> parameters) {
+        String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_DEFERRED_EVENTS);
 
-        return jdbcTemplate.query(sql, parameters, (resultSet, rowNum) -> {
-            return new DeferredEvent(
-                    resultSet.getString("state_code"),
-                    resultSet.getString("event_code")
+        return jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> {
+            return new DeferredWorkflowEvent(
+                    resultSet.getString(DatabaseConstants.COLUMN_STATE_CODE),
+                    resultSet.getString(DatabaseConstants.COLUMN_EVENT_CODE)
             );
         });
     }
-
 
 }
