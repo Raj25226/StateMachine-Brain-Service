@@ -25,10 +25,6 @@ class SqlQueryFunctionTest {
                 Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITION_ACTIONS, "0d5263001d67e625ab818c0c0a95095287e7cf731f0f643521189cf438a215f7"),
                 Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS, "68d85b87701180fab68f4ad2942b1a31e4f1e0284d751f62029af7a30126b901"),
                 Arguments.of(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY, "a61209c75c5cfeb6c0419d7554fa1bfb431e31c819970b0280dc59b6da6beebc"),
-                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.EXISTS_BY_IDEMPOTENCY_KEY, "e6e0fb16e95dac538e4919e1f6bccb9c6ad59299f95a0ec09c0323b940150002"),
-                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.RESERVE_IDEMPOTENCY_KEY, "ffe4ed8d819c8ae70a9642c89e2165cf6cac8a6c5d915e07a6477a4721c48550"),
-                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.FIND_AND_LOCK_IDEMPOTENCY_RECORD, "c629c5c186615e43f0e4abb328ffed47e2d44f2bb8f919b8a120b9b8695dca01"),
-                Arguments.of(SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.SAVE_SUCCESSFUL_RESPONSE, "862dc84f3dc417ae277a11c950ca2fa02273203a4fdfcbdb87a3db3a67b1cb86"),
                 Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE, "95b900a8422f544812c2ea7961ac4739f28b44f50a990f57b0d1180fd471b05d"),
                 Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE, "d6cac33cea63f41d0edfb3454dac11c0ce8750189f337f3cb40d63c24a701e4d"),
                 Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE, "3f03a43161eb83172631905dd04dbcc9fcf89a4902ddd1f22bace7683c1f9121"),
@@ -52,7 +48,7 @@ class SqlQueryFunctionTest {
     @Test
     void rejectsWrongParentEvenWhenSuffixExists() {
         assertThrows(IllegalArgumentException.class, () -> SqlQueryFunction.GET_QUERY.apply(
-                SqlQueryConstants.IDEMPOTENCY_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID));
+                SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_LATEST_ACTIVE_DEFINITION_ID));
     }
 
     @Test

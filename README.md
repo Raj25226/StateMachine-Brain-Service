@@ -1,7 +1,7 @@
 # State Machine Brain
 
 A database-configured workflow service for onboarding. Built with Java 25,
-Spring Boot 4.1.1, Spring StateMachine 4.0.2, PostgreSQL, Flyway, JDBC and Gson.
+Spring Boot 4.1.1, Spring StateMachine 4.0.2, PostgreSQL, Redis, Flyway, JDBC and Gson.
 Persistence uses `NamedParameterJdbcTemplate`; there is no JPA.
 
 The consuming service verifies OTPs, saves profiles and uploads documents. It
@@ -16,7 +16,7 @@ UDYAM_DOCUMENT_UPLOAD --UDYAM_DOCUMENT_UPLOADED--> COMPLETED
 
 ## Run locally
 
-Install Java 25+, Maven 3.9+ and PostgreSQL. Create a database named `workflow`
+Install Java 25+, Maven 3.9+, PostgreSQL and Redis. Create a database named `workflow`
 and give the database account permission to create the `workflow_brain` schema
 and its tables. Flyway creates the schema, application tables and seed data when
 the application starts.
@@ -28,6 +28,8 @@ export DB_URL='jdbc:postgresql://localhost:5432/workflow'
 export DB_USERNAME='admin'
 export DB_PASSWORD='admin'
 export SERVER_PORT='8081'
+export REDIS_HOST='localhost'
+export REDIS_PORT='6379'
 mvn spring-boot:run
 ```
 
@@ -42,6 +44,16 @@ schema inside that database.
 | `DB_USERNAME` | `admin` |
 | `DB_PASSWORD` | `admin` |
 | `SERVER_PORT` | `8081` |
+| `REDIS_HOST` | `localhost` |
+| `REDIS_PORT` | `6379` |
+| `REDIS_PASSWORD` | empty |
+
+Start Redis separately with persistence and eviction settings appropriate for
+idempotency storage, for example:
+
+```sh
+redis-server --appendonly yes --appendfsync always --maxmemory-policy noeviction
+```
 
 The repository does not include a Docker Compose file or Maven wrapper.
 Check `java -version` and `mvn -version` if Maven uses a different JDK.
@@ -232,11 +244,39 @@ The saved result can be older than current progress; use `GET_STATE` to read the
 latest state. Different inputs with the same key return `IDEMPOTENCY_CONFLICT`.
 Failed attempts keep the key bound to their inputs without saving a success.
 
-The key reservation commits separately. Processing then locks the reservation;
-event submissions also lock the workflow instance with `SELECT FOR UPDATE`.
-State updates, applied-transition history and successful response storage commit
-together. Actions that call external services would need an outbox or an
-independently idempotent integration because JDBC rollback cannot undo those calls.
+Redis stores fingerprints, claim status and successful response JSON under
+`workflow:idempotency:<idempotencyKey>`. Lua scripts atomically claim, complete and
+release a confirmed rollback. No idempotency table is used in PostgreSQL.
+
+A claim has one owner and no automatic takeover or expiration. Concurrent attempts
+with the same inputs return `409 IDEMPOTENCY_IN_PROGRESS`; different inputs return
+`409 IDEMPOTENCY_CONFLICT`. A confirmed JDBC rollback marks the claim retryable
+without removing its fingerprint. State updates and transition history commit in
+one PostgreSQL transaction. After that commit, the success response is saved in
+Redis. Redis errors return `503 IDEMPOTENCY_UNAVAILABLE`.
+
+PostgreSQL and Redis do not share a transaction. A crash or Redis failure after the
+database commit can leave a claim PROCESSING without a saved result. Retries stay
+blocked rather than execute the mutation again. Such claims require an operator
+to inspect workflow state/history and restore the result or establish that retry
+is safe. Do not delete an in-progress key, automatically expire it, or use a new
+key to bypass recovery.
+
+Redis is durable application storage here, not an evictable cache. Run a dedicated
+instance with AOF persistence (`appendonly yes`, preferably `appendfsync always`)
+and `maxmemory-policy noeviction`. Losing or evicting Redis records loses retry
+protection. The application does not change server persistence settings. External
+business calls still need their own idempotency or an outbox.
+
+Run the optional real Redis integration tests against a disposable instance:
+
+```sh
+REDIS_INTEGRATION_PORT=6379 mvn test
+```
+
+The tests create UUID-suffixed keys and delete only those keys. They cover atomic
+fingerprint checks, owner tokens, rollback retry and concurrent requests. Without
+the environment variable, these tests are skipped; unit tests still run.
 
 ## Database and Flyway
 
@@ -259,9 +299,8 @@ remain strings. Actions store their Java registry names in `action_name`; relate
 these names and the readable state codes. Definition IDs become strings only at
 the Spring StateMachine factory boundary, where the framework requires them.
 
-The schema has 9 application tables: workflow definitions, states, transitions,
-actions, state-action bindings, transition-action bindings, instances, request
-replays and transition history. See
+The schema has 8 application tables: workflow definitions, states, transitions,
+actions, state-action bindings, transition-action bindings, instances and transition history. See
 [docs/DATABASE.md](docs/DATABASE.md) for columns, relationships and inspection SQL.
 
 ### Reset the testing database
@@ -335,6 +374,8 @@ JSON binding failures can omit caller fields, but the correlation header remains
 | 409 | `WORKFLOW_ALREADY_EXISTS` | Reference already has a workflow |
 | 409 | `EVENT_NOT_ALLOWED` | Event cannot run in the current state |
 | 409 | `IDEMPOTENCY_CONFLICT` | Retry key is bound to different inputs |
+| 409 | `IDEMPOTENCY_IN_PROGRESS` | Processing or uncertain result requires recovery |
+| 503 | `IDEMPOTENCY_UNAVAILABLE` | Redis unavailable or claim ownership lost |
 | 405 / 415 | `INVALID_REQUEST` | Unsupported method or content type |
 | 500 | `INTERNAL_ERROR` | Unexpected failure; details remain in server logs |
 
@@ -370,7 +411,7 @@ src/main/java/com/example/statemachine/
   enums/           Domain enums and functional utility implementations
   exception/       Per-exception handlers and error envelope construction
   logging/         HTTP correlation, timing and outcome logs
-  repository/      JDBC repositories and state-machine persistence
+  repository/      JDBC workflow repositories, Redis idempotency and state-machine persistence
   serialization/   Gson request, response and timestamp adapters
   service/         Dispatch, idempotency and workflow transactions
   statemachine/    Model factory, action registry and event processor

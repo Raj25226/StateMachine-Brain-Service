@@ -1,6 +1,6 @@
 # Database design and queries
 
-All 9 application tables and `flyway_schema_history` use the `workflow_brain`
+All 8 application tables and `flyway_schema_history` use the `workflow_brain`
 schema. Flyway creates the schema before initializing its history.
 
 - `V1__create_workflow_schema.sql`: tables, constraints, identity columns and indexes.
@@ -25,7 +25,7 @@ Names and business identifiers are separate from database IDs:
 - States retain `state_code`; transitions retain `event_code`.
 - Actions retain `action_name`, such as `recordStateEntry`.
 - Instances retain a unique `reference_id` for API lookups.
-- Retry reservations retain a unique `idempotency_key`; `request_id` is correlation.
+- Redis reservations use `idempotency_key`; transition history retains it only for audit correlation.
 
 Java entity identifiers use Integer. Spring StateMachine's factory accepts a
 String machine identifier, so definition IDs are converted only at that boundary.
@@ -44,15 +44,15 @@ Every table below has its own `id` primary key in addition to the listed columns
 | workflow_state_action | phase, execution_order; fk_id_workflow_state, fk_id_workflow_action; unique (fk_id_workflow_state, phase, execution_order) |
 | workflow_transition_action | execution_order; fk_id_workflow_transition, fk_id_workflow_action; unique (fk_id_workflow_transition, execution_order) |
 | workflow_instances | reference_id unique, machine_context, context_format_version, created_at, updated_at; fk_id_workflow_definition, fk_id_workflow_state |
-| workflow_request_replay | idempotency_key unique, request_fingerprint, response_json, http_status, created_at, completed_at |
 | workflow_transition_history | event_code, request_id, idempotency_key, created_at; fk_id_workflow_instance, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state |
 
 Composite foreign keys ensure source, target and current states belong to the
 correct definition. History also checks that its instance belongs to that
 definition. Internal transitions require matching source and target state IDs.
 
-The replay table is independent of instance foreign keys because a failed command
-can reserve a retry key before any instance exists.
+Redis handles idempotency reservations and saved responses. PostgreSQL contains
+no replay table. History stores the caller's request ID and idempotency key as
+audit metadata, without a foreign key to Redis.
 
 ## Seeded onboarding
 
@@ -94,25 +94,23 @@ Branching definitions can return multiple rows. The instance stores its current
 state ID; runtime/API queries resolve it to a state code. There is no duplicated
 physical current_state or next_state column to drift from the configured states.
 
-## Inspect context and retry responses
+## Inspect saved context
 
 ```sql
 SELECT id, reference_id, fk_id_workflow_definition, fk_id_workflow_state, machine_context
 FROM workflow_brain.workflow_instances WHERE reference_id = 'APP-101';
-
-SELECT id, idempotency_key, http_status, created_at, completed_at, response_json
-FROM workflow_brain.workflow_request_replay
-WHERE idempotency_key = 'APP-101-otp';
 ```
 
 `machine_context` is versioned JSON containing formatVersion, state and variables.
 The state code must match the code resolved from the instance's current state FK.
 Contexts without JSON restore from the current state with empty extended variables.
 
-A mutation locks the reservation by its unique idempotency key. Event submissions
-also lock the instance row with `FOR UPDATE OF instance`, avoiding locks on shared
-state-definition rows. State changes, history and successful retry responses
-participate in the same transaction.
+An atomic Redis Lua script claims each mutation key. Event submissions also lock
+the PostgreSQL instance row with `FOR UPDATE OF instance`. State updates and
+history commit together in PostgreSQL; response storage follows in Redis.
+Confirmed rollbacks make the Redis claim retryable. Uncertain outcomes remain
+PROCESSING until recovery. See the README's idempotency section for persistence
+requirements and the cross-store commit limitation.
 
 ## Inspect applied transition history
 

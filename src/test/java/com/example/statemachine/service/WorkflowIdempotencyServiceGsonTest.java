@@ -3,17 +3,18 @@ package com.example.statemachine.service;
 import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowResponse;
-import com.example.statemachine.dto.persistence.WorkflowIdempotencyRecord;
+import com.example.statemachine.dto.persistence.WorkflowIdempotencyClaim;
 import com.example.statemachine.dto.workflow.WorkflowCommand;
+import com.example.statemachine.enums.IdempotencyClaimOutcome;
 import com.example.statemachine.enums.WorkflowOperation;
-import com.example.statemachine.repository.JdbcWorkflowIdempotencyRepository;
+import com.example.statemachine.repository.RedisWorkflowIdempotencyRepository;
 import com.google.gson.Gson;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class WorkflowCommandServiceGsonTest {
+class WorkflowIdempotencyServiceGsonTest {
     @Test
     void replaysPreviouslyStoredResponseWithOriginalTimestampAndNewRequestId() {
         String savedResponse = """
@@ -24,17 +25,17 @@ class WorkflowCommandServiceGsonTest {
                 "currentState":"OTP_VERIFICATION","nextEvent":"OTP_VERIFIED","nextState":"PROFILE_DETAILS",
                 "completed":false,"availableTransitions":[{"event":"OTP_VERIFIED","nextState":"PROFILE_DETAILS"}]}}
                 """;
-        JdbcWorkflowIdempotencyRepository repository = new JdbcWorkflowIdempotencyRepository(null) {
+        RedisWorkflowIdempotencyRepository repository = new RedisWorkflowIdempotencyRepository(null) {
             @Override
-            public WorkflowIdempotencyRecord findAndLockByIdempotencyKey(String key) {
-                return new WorkflowIdempotencyRecord(1, "fingerprint", savedResponse, 201);
+            public WorkflowIdempotencyClaim claim(String key, String fingerprint, String ownerToken) {
+                return new WorkflowIdempotencyClaim(IdempotencyClaimOutcome.REPLAY, savedResponse, 201);
             }
         };
         Gson gson = new GsonConfiguration().gson();
-        WorkflowCommandService service = new WorkflowCommandService(null, repository, gson);
+        WorkflowIdempotencyService service = new WorkflowIdempotencyService(repository, null, gson);
         WorkflowCommand command = new WorkflowCommand(new WorkflowCommandMetadata(
                 "CREATE", "retry-request", "APP-101", null, "key-1", "onboarding"), WorkflowOperation.CREATE);
-        var response = service.executeIdempotentCommand(command, "fingerprint");
+        var response = service.execute(command, "fingerprint");
         assertEquals(201, response.getStatusCode().value());
         WorkflowResponse body = response.getBody();
         assertNotNull(body);
