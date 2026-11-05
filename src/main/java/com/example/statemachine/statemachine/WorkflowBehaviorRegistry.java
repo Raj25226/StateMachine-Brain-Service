@@ -9,7 +9,6 @@ import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.List;
 import lombok.AllArgsConstructor;
-import com.example.statemachine.constants.WorkflowContextConstants;
 import com.example.statemachine.enums.LogValueSanitizerFunction;
 import java.util.Map;
 import java.util.function.Function;
@@ -28,39 +27,19 @@ public class WorkflowBehaviorRegistry {
     private final Map<String, WorkflowStepStrategy> strategiesByName = new HashMap<>();
 
 
-    private final Map<String, Function< StateContext<String, String>, Mono<Void> > > actions =
-            Map.of(
-                    WorkflowBehaviorConstants.RECORD_STATE_ENTRY,
-                        Actions.from( stateContext -> {
-                                    stateContext.getExtendedState()
-                                            .getVariables()
-                                            .put(WorkflowContextConstants.LAST_ENTERED_STATE, stateContext.getTarget().getId());
-                                    log.debug("workflow_state_entered state={}", LogValueSanitizerFunction.SANITIZE.apply(stateContext.getTarget().getId()));
-
-                                }
-                        ),
-
-                    WorkflowBehaviorConstants.RECORD_STATE_EXIT,
-                        Actions.from(stateContext -> {
-                                    stateContext.getExtendedState()
-                                            .getVariables()
-                                            .put(WorkflowContextConstants.LAST_EXITED_STATE, stateContext.getSource().getId());
-                                    log.debug("workflow_state_exited state={}", LogValueSanitizerFunction.SANITIZE.apply(stateContext.getSource().getId()));
-                                }
-                        ),
-
-                    WorkflowBehaviorConstants.RECORD_TRANSITION,
-                        Actions.from( stateContext -> {
-                                    stateContext.getExtendedState()
-                                            .getVariables()
-                                            .put(WorkflowContextConstants.LAST_PROCESSED_EVENT, stateContext.getEvent());
-                                    log.debug("workflow_transition_action event={}", LogValueSanitizerFunction.SANITIZE.apply(stateContext.getEvent()));
-                                }
-                        ),
-
-                    WorkflowBehaviorConstants.OBSERVE_STATE,
-                        Actions.from( stateContext -> log.debug("workflow_state_activity definition={}", LogValueSanitizerFunction.SANITIZE.apply(stateContext.getStateMachine().getId())))
-            );
+    private final Map<String, Function<StateContext<String, String>, Mono<Void>>> actions = Map.of(
+            WorkflowBehaviorConstants.RECORD_STATE_ENTRY,
+            Actions.from(context -> log.debug("workflow_state_entered state={}",
+                    LogValueSanitizerFunction.SANITIZE.apply(context.getTarget().getId()))),
+            WorkflowBehaviorConstants.RECORD_STATE_EXIT,
+            Actions.from(context -> log.debug("workflow_state_exited state={}",
+                    LogValueSanitizerFunction.SANITIZE.apply(context.getSource().getId()))),
+            WorkflowBehaviorConstants.RECORD_TRANSITION,
+            Actions.from(context -> log.debug("workflow_transition_action event={}",
+                    LogValueSanitizerFunction.SANITIZE.apply(context.getEvent()))),
+            WorkflowBehaviorConstants.OBSERVE_STATE,
+            Actions.from(context -> log.debug("workflow_state_activity definition={}",
+                    LogValueSanitizerFunction.SANITIZE.apply(context.getStateMachine().getId()))));
 
     @PostConstruct
     public void registerStepStrategies() {

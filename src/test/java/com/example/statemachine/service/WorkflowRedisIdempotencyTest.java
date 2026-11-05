@@ -74,7 +74,7 @@ class WorkflowRedisIdempotencyTest {
     @Test
     void confirmedJdbcRollbackMakesTheSameClaimRetryable() {
         RecordingRepository repository = new RecordingRepository();
-        WorkflowExecutionService failingExecution = new WorkflowExecutionService(null, null, null, null, null, null, null) {
+        WorkflowExecutionService failingExecution = new WorkflowExecutionService(null, null, null, null, null, null) {
             @Override
             public WorkflowDetails createWorkflow(String referenceId, String workflowKey) {
                 throw new IllegalStateException("Database write failed");

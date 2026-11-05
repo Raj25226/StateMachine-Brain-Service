@@ -59,8 +59,6 @@ CREATE TABLE workflow_brain.workflow_transition_action (
 CREATE TABLE workflow_brain.workflow_instances (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     reference_id VARCHAR(100) NOT NULL UNIQUE,
-    machine_context TEXT,
-    context_format_version INTEGER NOT NULL DEFAULT 1 CHECK (context_format_version = 1),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fk_id_workflow_definition INTEGER NOT NULL REFERENCES workflow_brain.workflow_definition(id),

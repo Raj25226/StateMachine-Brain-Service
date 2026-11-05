@@ -43,7 +43,7 @@ Every table below has its own `id` primary key in addition to the listed columns
 | workflow_transition | event_code, transition_kind; fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state; unique (fk_id_workflow_definition, fk_id_source_workflow_state, event_code) |
 | workflow_state_action | phase, execution_order; fk_id_workflow_state, fk_id_workflow_action; unique (fk_id_workflow_state, phase, execution_order) |
 | workflow_transition_action | execution_order; fk_id_workflow_transition, fk_id_workflow_action; unique (fk_id_workflow_transition, execution_order) |
-| workflow_instances | reference_id unique, machine_context, context_format_version, created_at, updated_at; fk_id_workflow_definition, fk_id_workflow_state |
+| workflow_instances | reference_id unique, created_at, updated_at; fk_id_workflow_definition, fk_id_workflow_state |
 | workflow_transition_history | event_code, request_id, idempotency_key, created_at; fk_id_workflow_instance, fk_id_workflow_definition, fk_id_source_workflow_state, fk_id_target_workflow_state |
 
 Composite foreign keys ensure source, target and current states belong to the
@@ -97,16 +97,52 @@ Branching definitions can return multiple rows. The instance stores its current
 state ID; runtime/API queries resolve it to a state code. There is no duplicated
 physical current_state or next_state column to drift from the configured states.
 
-## Inspect saved context
+## Inspect saved progress
 
 ```sql
-SELECT id, reference_id, fk_id_workflow_definition, fk_id_workflow_state, machine_context
-FROM workflow_brain.workflow_instances WHERE reference_id = 'APP-101';
+SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition,
+       instance.fk_id_workflow_state, state.state_code AS current_state,
+       instance.created_at, instance.updated_at
+FROM workflow_brain.workflow_instances instance
+JOIN workflow_brain.workflow_state state ON state.id = instance.fk_id_workflow_state
+WHERE instance.reference_id = 'APP-101';
 ```
 
-`machine_context` is versioned JSON containing formatVersion, state and variables.
-The state code must match the code resolved from the instance's current state FK.
-Contexts without JSON restore from the current state with empty extended variables.
+The machine restores directly from the state FK with empty extended variables.
+There is no serialized context column or format version. No additional columns
+are required for the removed bookkeeping values:
+
+| Former JSON value | Relational source |
+| --- | --- |
+| state / lastEnteredState | Instance's state FK joined to workflow_state |
+| lastProcessedEvent | Applied events in workflow_transition_history |
+| lastExitedState | Source states in workflow_transition_history |
+
+History includes internal transitions too, so distinguish actual state exits from
+same-state processing when reviewing that audit trail. Arbitrary extended variables
+are not durable; persistence rejects them rather than silently dropping values.
+Add explicit columns for future durable business values.
+
+### Apply the schema change
+
+The two testing-baseline migrations now omit both context columns. Reset the
+testing schema and Flyway history together before reseeding this baseline.
+Changing a migration file does not change an already-running database.
+
+For a database whose data must be retained, keep its previously applied V1/V2
+files unchanged and put this DDL in a new versioned migration:
+
+```sql
+ALTER TABLE workflow_brain.workflow_instances
+    DROP COLUMN IF EXISTS machine_context,
+    DROP COLUMN IF EXISTS context_format_version;
+```
+
+The state FK, pinned definition and transition-history rows remain intact. The
+removed JSON values in the current implementation are bookkeeping duplicates;
+any custom extended variables introduced outside this repository need explicit
+relational columns before their old JSON storage is removed. Deploy the revised
+code and schema together. No existing user database is altered by editing these files.
 
 An atomic Redis Lua script claims each mutation key. Event submissions also lock
 the PostgreSQL instance row with `FOR UPDATE OF instance`. State updates and

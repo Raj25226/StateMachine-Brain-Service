@@ -15,10 +15,10 @@ CROSS JOIN (VALUES
 WHERE definition.workflow_key = 'onboarding' AND definition.version = 1;
 
 INSERT INTO workflow_brain.workflow_action (action_name, description) VALUES
-('recordStateEntry', 'Record the last entered state in extended state'),
-('recordStateExit', 'Record the last exited state in extended state'),
+('recordStateEntry', 'Log the entered state; current state is stored by its FK'),
+('recordStateExit', 'Log the exited state; transition history stores source states'),
 ('observeState', 'Log state activity at DEBUG level'),
-('recordTransition', 'Record the last processed transition event in extended state'),
+('recordTransition', 'Log the processed event; transition history stores applied events'),
 ('verifyOtp', 'TODO: verify OTP through an external service'),
 ('updateProfile', 'TODO: update profile through an external service'),
 ('uploadAccountStatement', 'TODO: upload account statement through an external service'),

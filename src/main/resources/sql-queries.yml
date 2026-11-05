@@ -58,21 +58,19 @@ workflow-instance:
     FROM workflow_brain.workflow_state state
     WHERE state.fk_id_workflow_definition = :definition AND state.state_code = :state
   find-and-lock-by-reference: |
-    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state,
-           instance.machine_context, instance.context_format_version
+    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state
     FROM workflow_brain.workflow_instances instance
     JOIN workflow_brain.workflow_state state ON state.id = instance.fk_id_workflow_state
     WHERE instance.reference_id = :reference
     FOR UPDATE OF instance
   find-by-reference: |
-    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state,
-           instance.machine_context, instance.context_format_version
+    SELECT instance.id, instance.reference_id, instance.fk_id_workflow_definition, state.state_code AS current_state
     FROM workflow_brain.workflow_instances instance
     JOIN workflow_brain.workflow_state state ON state.id = instance.fk_id_workflow_state
     WHERE instance.reference_id = :reference
-  update-context: |
+  update-current-state: |
     UPDATE workflow_brain.workflow_instances instance
-    SET fk_id_workflow_state = state.id, machine_context = :context, context_format_version = 1, updated_at = CURRENT_TIMESTAMP
+    SET fk_id_workflow_state = state.id, updated_at = CURRENT_TIMESTAMP
     FROM workflow_brain.workflow_state state
     WHERE instance.reference_id = :reference
       AND state.fk_id_workflow_definition = instance.fk_id_workflow_definition AND state.state_code = :state
