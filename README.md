@@ -230,14 +230,14 @@ state. Each submitted event is processed immediately; unsupported events return
 ## Gson serialization
 
 [GsonConfiguration](src/main/java/com/example/statemachine/config/GsonConfiguration.java)
-provides the shared Gson bean used for workflow HTTP envelopes, machine contexts,
-saved responses and fingerprint generation.
+provides the shared Gson bean used for workflow HTTP envelopes, saved Redis
+responses and fingerprint generation. PostgreSQL persistence does not serialize JSON.
 
 - `WorkflowRequestTypeAdapter` enforces the strict request structure.
 - `WorkflowResponseTypeAdapterFactory` omits optional null fields and always
   includes `payload`, including `payload: null` on errors.
 - `InstantTypeAdapter` reads and writes ISO-8601 timestamps.
-- `JsonNumberParserFunction` preserves numeric types in saved context variables.
+- `JsonNumberParserFunction` preserves numeric types when binding general JSON values.
 - `WorkflowGsonHttpMessageConverter` handles workflow envelopes; Swagger documents
   use their own framework serialization.
 
@@ -367,7 +367,7 @@ Step strategies are discovered from Spring components implementing
 `WorkflowStepStrategy`. A configured transition action name selects an implementation;
 `WorkflowStepCommand` executes it with request and definition context. The four
 onboarding strategies contain TODOs for future external calls. Bookkeeping actions
-record context values or log activity. All transition actions are awaited before
+log state entry, state exit, transitions and activity. All transition actions are awaited before
 progress is persisted.
 Failures must propagate so the database transaction rolls back. External side
 effects also require their own idempotency because a database rollback cannot
@@ -379,9 +379,13 @@ flowchart, implementation template, action bindings and workflow version changes
 Reordering transitions or reusing a strategy requires configuration changes only.
 A new kind of business task requires a new strategy and its database binding.
 
-Machine context format 1 stores a flat, single-region state and JSON-compatible
-extended variables. Hierarchical/parallel states and arbitrary Java object
-serialization are not supported.
+Machine restoration uses the instance's `fk_id_workflow_state` and pinned definition.
+PostgreSQL stores no machine-context JSON or context format version. The current
+state is resolved through the state FK; processed events and source/target states
+are already recorded in transition history. The bookkeeping actions only log.
+Restored machines have empty extended variables. Attempts to persist nonempty
+extended variables are rejected; durable business values require explicit relational
+columns and queries. Hierarchical/parallel persistence is not supported.
 
 Applied events are recorded in `workflow_transition_history`. Internal transitions
 also create history. Creates, reads, rejected events and
@@ -435,7 +439,7 @@ src/main/java/com/example/statemachine/
   constants/       API properties, error codes, SQL keys and workflow constants
   controller/      Business endpoint and Swagger annotations
   dto/api/         HTTP envelopes and response details
-  dto/persistence/ Saved context and database records
+  dto/persistence/ Relational database records
   dto/workflow/    Workflow definitions and commands
   enums/           Domain enums and functional utility implementations
   exception/       Per-exception handlers and error envelope construction

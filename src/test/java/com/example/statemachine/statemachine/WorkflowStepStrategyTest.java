@@ -1,6 +1,5 @@
 package com.example.statemachine.statemachine;
 
-import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
 import com.example.statemachine.dto.workflow.WorkflowStateDefinition;
@@ -171,7 +170,7 @@ class WorkflowStepStrategyTest {
         }
         context.register(WorkflowBehaviorRegistry.class, JdbcWorkflowModelFactory.class, WorkflowEngineConfiguration.class);
         context.registerBean(JdbcWorkflowStateMachinePersistence.class,
-                () -> new JdbcWorkflowStateMachinePersistence(null, new GsonConfiguration().gson()));
+                () -> new JdbcWorkflowStateMachinePersistence(null));
         context.refresh();
         return context;
     }

@@ -15,12 +15,10 @@ import com.example.statemachine.exception.WorkflowException;
 import com.example.statemachine.repository.JdbcWorkflowDefinitionRepository;
 import com.example.statemachine.repository.JdbcWorkflowHistoryRepository;
 import com.example.statemachine.repository.JdbcWorkflowInstanceRepository;
-import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
 import com.example.statemachine.statemachine.WorkflowEventProcessor;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.statemachine.StateMachine;
-import org.springframework.statemachine.StateMachineContext;
 import org.springframework.statemachine.config.StateMachineFactory;
 import org.springframework.statemachine.persist.StateMachinePersister;
 import org.springframework.stereotype.Service;
@@ -35,7 +33,6 @@ public class WorkflowExecutionService {
     private final JdbcWorkflowInstanceRepository workflowInstanceRepository;
     private final StateMachineFactory<String, String> stateMachineFactory;
     private final StateMachinePersister<String, String, String> stateMachinePersister;
-    private final JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence;
     private final JdbcWorkflowHistoryRepository workflowHistoryRepository;
     private final WorkflowEventProcessor workflowEventProcessor;
 
@@ -71,13 +68,12 @@ public class WorkflowExecutionService {
         WorkflowInstance workflowInstance = workflowInstanceRepository.findByReferenceId(referenceId);
         WorkflowDefinition workflowDefinition = workflowDefinitionRepository.loadWorkflowDefinition(workflowInstance.definitionId());
 
-        StateMachineContext<String, String> stateMachineContext = workflowStateMachinePersistence.deserializeContext(workflowInstance);
         log.debug("workflow_state_loaded definition={} state={}",
-                workflowInstance.definitionId(), LogValueSanitizerFunction.SANITIZE.apply(stateMachineContext.getState()));
+                workflowInstance.definitionId(), LogValueSanitizerFunction.SANITIZE.apply(workflowInstance.currentState()));
         return buildWorkflowDetails(
                 referenceId,
                 workflowDefinition,
-                stateMachineContext.getState(),
+                workflowInstance.currentState(),
                 null);
     }
 

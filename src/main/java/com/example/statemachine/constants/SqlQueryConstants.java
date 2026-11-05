@@ -20,5 +20,5 @@ public final class SqlQueryConstants {
     public static final String INSERT_WORKFLOW_INSTANCE = ".insert";
     public static final String FIND_AND_LOCK_WORKFLOW_INSTANCE = ".find-and-lock-by-reference";
     public static final String FIND_WORKFLOW_INSTANCE = ".find-by-reference";
-    public static final String UPDATE_WORKFLOW_CONTEXT = ".update-context";
+    public static final String UPDATE_CURRENT_STATE = ".update-current-state";
 }

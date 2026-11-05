@@ -26,9 +26,9 @@ class SqlQueryFunctionTest {
                 Arguments.of(SqlQueryConstants.WORKFLOW_DEFINITION_PARENT, SqlQueryConstants.FIND_TRANSITIONS, "68d85b87701180fab68f4ad2942b1a31e4f1e0284d751f62029af7a30126b901"),
                 Arguments.of(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY, "a61209c75c5cfeb6c0419d7554fa1bfb431e31c819970b0280dc59b6da6beebc"),
                 Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.INSERT_WORKFLOW_INSTANCE, "95b900a8422f544812c2ea7961ac4739f28b44f50a990f57b0d1180fd471b05d"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE, "d6cac33cea63f41d0edfb3454dac11c0ce8750189f337f3cb40d63c24a701e4d"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE, "3f03a43161eb83172631905dd04dbcc9fcf89a4902ddd1f22bace7683c1f9121"),
-                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_WORKFLOW_CONTEXT, "71827d0130e4dde1e0e2702d13e721ec07c17e5969e49d8a73aa791dea9643ac"));
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_AND_LOCK_WORKFLOW_INSTANCE, "82266d7f0777c7b1ac300a31877dff9f7135e51df3afd07dcfcc50f8ad588ccc"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.FIND_WORKFLOW_INSTANCE, "85e1e2040c251e4a4e21cf4646e7f7f7271c35ae224156137aa7f6f32aada67e"),
+                Arguments.of(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_CURRENT_STATE, "802e697bfef7e3bb053c972f00f433649673a6e2b0222d19011cf48396a461b7"));
     }
 
     @ParameterizedTest

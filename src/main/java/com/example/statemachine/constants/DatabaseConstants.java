@@ -7,13 +7,11 @@ public final class DatabaseConstants {
     public static final String COLUMN_ID = "id";
     public static final String COLUMN_FK_ID_WORKFLOW_ACTION = "fk_id_workflow_action";
     public static final String COLUMN_ACTION_NAME = "action_name";
-    public static final String COLUMN_CONTEXT_FORMAT_VERSION = "context_format_version";
     public static final String COLUMN_CURRENT_STATE = "current_state";
     public static final String COLUMN_FK_ID_WORKFLOW_DEFINITION = "fk_id_workflow_definition";
     public static final String COLUMN_EVENT_CODE = "event_code";
     public static final String COLUMN_EXECUTION_ORDER = "execution_order";
     public static final String COLUMN_INITIAL_STATE = "initial_state";
-    public static final String COLUMN_MACHINE_CONTEXT = "machine_context";
     public static final String COLUMN_PHASE = "phase";
     public static final String COLUMN_REFERENCE_ID = "reference_id";
     public static final String COLUMN_SOURCE_STATE = "source_state";
@@ -24,7 +22,6 @@ public final class DatabaseConstants {
     public static final String COLUMN_TRANSITION_KIND = "transition_kind";
     public static final String COLUMN_VERSION = "version";
     public static final String COLUMN_WORKFLOW_KEY = "workflow_key";
-    public static final String PARAM_CONTEXT = "context";
     public static final String PARAM_DEFINITION = "definition";
     public static final String PARAM_DEFINITION_ID = "definitionId";
     public static final String PARAM_EVENT = "event";

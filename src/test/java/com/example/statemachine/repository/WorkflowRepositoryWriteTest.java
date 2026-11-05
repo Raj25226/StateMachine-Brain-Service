@@ -29,8 +29,8 @@ class WorkflowRepositoryWriteTest {
     }
 
     @Test
-    void rejectsContextUpdateWhenTargetStateCannotBeResolved() {
+    void rejectsStateUpdateWhenTargetStateCannotBeResolved() {
         JdbcWorkflowInstanceRepository repository = new JdbcWorkflowInstanceRepository(noMatchingRows);
-        assertThrows(IllegalStateException.class, () -> repository.updateWorkflowContext("APP-101", "MISSING", "{}"));
+        assertThrows(IllegalStateException.class, () -> repository.updateCurrentState("APP-101", "MISSING"));
     }
 }

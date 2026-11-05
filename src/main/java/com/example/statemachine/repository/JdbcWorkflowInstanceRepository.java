@@ -48,9 +48,7 @@ public class JdbcWorkflowInstanceRepository {
                                         resultSet.getInt(DatabaseConstants.COLUMN_ID),
                                         resultSet.getString(DatabaseConstants.COLUMN_REFERENCE_ID),
                                         resultSet.getInt(DatabaseConstants.COLUMN_FK_ID_WORKFLOW_DEFINITION),
-                                        resultSet.getString(DatabaseConstants.COLUMN_CURRENT_STATE),
-                                        resultSet.getString(DatabaseConstants.COLUMN_MACHINE_CONTEXT),
-                                        resultSet.getInt(DatabaseConstants.COLUMN_CONTEXT_FORMAT_VERSION)
+                                        resultSet.getString(DatabaseConstants.COLUMN_CURRENT_STATE)
                                     )
                 )
                 .stream()
@@ -60,14 +58,14 @@ public class JdbcWorkflowInstanceRepository {
                 );
     }
 
-    public void updateWorkflowContext(String referenceId, String currentState, String machineContextJson) {
-        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_WORKFLOW_CONTEXT);
+    public void updateCurrentState(String referenceId, String currentState) {
+        final String sql = SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.WORKFLOW_INSTANCE_PARENT, SqlQueryConstants.UPDATE_CURRENT_STATE);
 
-        Map<String, Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId, DatabaseConstants.PARAM_STATE, currentState, DatabaseConstants.PARAM_CONTEXT, machineContextJson);
+        Map<String, Object> parameters = Map.of(DatabaseConstants.PARAM_REFERENCE, referenceId, DatabaseConstants.PARAM_STATE, currentState);
         int updatedRowCount = jdbcTemplate.update(sql, parameters);
 
         if (updatedRowCount != 1){
-            throw new IllegalStateException("Workflow disappeared while persisting context.");
+            throw new IllegalStateException("Workflow disappeared while updating its current state.");
         }
     }
 }

@@ -43,7 +43,7 @@ flowchart TD
     Execute --> Outcome{"Succeeded?"}
     Outcome -->|No| Rollback["Propagate failure; roll back database transaction"]
     Outcome -->|Yes| Bookkeeping["Run remaining ordered actions"]
-    Bookkeeping --> Persist["Save history and machine context; commit database"]
+    Bookkeeping --> Persist["Save history and current state FK; commit database"]
     Persist --> Redis["Save response in Redis and return success"]
 ```
 
@@ -72,7 +72,7 @@ accept a workflowKey from the caller. Strategies should not hardcode a next stat
 [WorkflowBehaviorRegistry](../src/main/java/com/example/statemachine/statemachine/WorkflowBehaviorRegistry.java)
 adapts a registered strategy to a StateMachine action. The model factory awaits
 transition actions in configured order. Errors mark the machine failed and reach
-the execution service before history/context persistence.
+the execution service before history/state persistence.
 
 ## Implement the existing TODOs
 
@@ -147,9 +147,21 @@ State row order and numeric IDs do not define execution order; transitions do.
 CREATE uses the highest ACTIVE version for its workflow key. Existing instances
 remain on their original definition version. This protects an in-flight application
 from silently being moved to a different process. Moving existing instances to a
-new graph requires an explicit state/context/history migration policy; no automatic
+new graph requires an explicit state/history migration policy; no automatic
 upgrade endpoint is implemented.
 
 The current testing baseline V2 includes the four step-action bindings. Reset and
 reseed the testing schema and Flyway history to apply the changed baseline.
 For a retained database, use a new migration rather than altering applied history.
+
+## Relational persistence
+
+Machines restore from `workflow_instances.fk_id_workflow_state` and the instance's
+pinned definition. There is no machine-context JSON column or format version.
+State entry/exit and transition actions only log; current progress and historical
+source/target states/events are already available in relational tables.
+
+Do not put durable business data in extended machine variables. Persistence rejects
+nonempty extended variables to prevent silently losing them on restart. Add explicit
+columns and repository methods when durable step results are defined. Per-request
+metadata travels in message headers and is not serialized into PostgreSQL.
