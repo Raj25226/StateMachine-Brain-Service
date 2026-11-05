@@ -1,7 +1,7 @@
 package com.example.statemachine.statemachine;
 
-import com.example.statemachine.repository.JdbcStateMachinePersist;
-
+import lombok.AllArgsConstructor;
+import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.statemachine.config.EnableStateMachineFactory;
@@ -12,21 +12,18 @@ import org.springframework.statemachine.persist.StateMachinePersister;
 
 @Configuration
 @EnableStateMachineFactory
+@AllArgsConstructor
 public class WorkflowEngineConfiguration extends StateMachineConfigurerAdapter<String, String> {
-    private final JdbcWorkflowModelFactory modelFactory;
-
-    public WorkflowEngineConfiguration(JdbcWorkflowModelFactory modelFactory) {
-        this.modelFactory = modelFactory;
-    }
+    private final JdbcWorkflowModelFactory workflowModelFactory;
 
     @Override
-    public void configure(StateMachineModelConfigurer<String, String> model) throws Exception {
-        model.withModel()
-                .factory(modelFactory);
+    public void configure(StateMachineModelConfigurer<String, String> modelConfigurer) throws Exception {
+        modelConfigurer.withModel()
+                .factory(workflowModelFactory);
     }
 
     @Bean
-    StateMachinePersister<String, String, String> workflowPersister(JdbcStateMachinePersist jdbcStateMachinePersist) {
-        return new DefaultStateMachinePersister<>(jdbcStateMachinePersist);
+    StateMachinePersister<String, String, String> workflowStateMachinePersister(JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence) {
+        return new DefaultStateMachinePersister<>(workflowStateMachinePersistence);
     }
 }

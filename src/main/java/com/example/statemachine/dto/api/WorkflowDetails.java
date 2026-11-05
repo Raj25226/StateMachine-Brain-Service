@@ -1,10 +1,8 @@
 package com.example.statemachine.dto.api;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import com.example.statemachine.enums.WorkflowEventOutcome;
 import java.util.List;
-import com.example.statemachine.enums.EventOutcome;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record WorkflowDetails(
         String referenceId,
         String workflowKey,
@@ -13,7 +11,6 @@ public record WorkflowDetails(
         String nextEvent,
         String nextState,
         boolean completed,
-        List<AvailableTransition> availableTransitions,
-        EventOutcome eventOutcome,
-        List<String> pendingEvents
+        List<AvailableWorkflowTransition> availableTransitions,
+        WorkflowEventOutcome eventOutcome
 ) { }

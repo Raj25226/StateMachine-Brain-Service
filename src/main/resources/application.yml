@@ -4,18 +4,15 @@ spring:
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/workflow}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:admin}
     driver-class-name: org.postgresql.Driver
 
   flyway:
     enabled: true
-
-  jackson:
-    deserialization:
-      fail-on-trailing-tokens: true
-    read:
-      strict-duplicate-detection: true
+    default-schema: workflow_brain
+    schemas: workflow_brain
+    create-schemas: true
 
 server:
   port: ${SERVER_PORT:8081}
