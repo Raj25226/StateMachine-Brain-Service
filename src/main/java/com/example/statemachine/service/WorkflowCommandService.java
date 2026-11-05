@@ -7,18 +7,18 @@ import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowDetails;
 import com.example.statemachine.dto.api.WorkflowResponse;
 import com.example.statemachine.dto.api.WorkflowResponseMetadata;
-import com.example.statemachine.dto.persistence.WorkflowIdempotencyRecord;
 import com.example.statemachine.dto.workflow.WorkflowCommand;
 import com.example.statemachine.enums.WorkflowOperation;
-import com.example.statemachine.exception.WorkflowException;
-import com.example.statemachine.repository.JdbcWorkflowIdempotencyRepository;
-import com.google.gson.Gson;
+import com.example.statemachine.repository.RedisWorkflowIdempotencyRepository;
 import java.time.Instant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Slf4j
@@ -26,52 +26,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class WorkflowCommandService {
 
     private final WorkflowExecutionService workflowExecutionService;
-    private final JdbcWorkflowIdempotencyRepository idempotencyRepository;
-    private final Gson gson;
+    private final RedisWorkflowIdempotencyRepository idempotencyRepository;
 
-    @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<WorkflowResponse> executeIdempotentCommand(WorkflowCommand command, String requestFingerprint) {
-        String idempotencyKey = command.metadata().idempotencyKey();
-        WorkflowIdempotencyRecord idempotencyRecord = idempotencyRepository.findAndLockByIdempotencyKey(idempotencyKey);
-
-        if (!requestFingerprint.equals(idempotencyRecord.requestFingerprint())) {
-            log.debug("workflow_idempotency_conflict operation={}", command.operation());
-            throw WorkflowException.conflict(
-                    ApiErrorConstants.IDEMPOTENCY_CONFLICT,
-                    "This idempotencyKey is bound to different request inputs.");
-        }
-
-        if (idempotencyRecord.responseJson() != null) {
-            log.debug("workflow_idempotency_replay operation={} status={}", command.operation(), idempotencyRecord.httpStatus());
-            return restoreIdempotentResponse(idempotencyRecord, command.metadata().requestId());
-        }
-
-        ResponseEntity<WorkflowResponse> workflowResponse = dispatchWorkflowCommand(command);
-        try {
-            idempotencyRepository.saveSuccessfulResponse(
-                    idempotencyKey,
-                    gson.toJson(workflowResponse.getBody()),
-                    workflowResponse.getStatusCode().value()
-            );
-        } catch (Exception exception) {
-            throw new IllegalStateException("Cannot save replay response.", exception);
-        }
-        return workflowResponse;
-    }
-
-    private ResponseEntity<WorkflowResponse> restoreIdempotentResponse(WorkflowIdempotencyRecord idempotencyRecord, String requestId) {
-        try {
-            WorkflowResponse originalResponse = gson.fromJson(idempotencyRecord.responseJson(), WorkflowResponse.class);
-            WorkflowResponseMetadata responseMetadata = originalResponse.metadata();
-            WorkflowResponseMetadata replayedResponseMetadata = new WorkflowResponseMetadata(
-                    responseMetadata.operation(), requestId, responseMetadata.referenceId(), responseMetadata.event(),
-                    responseMetadata.idempotencyKey(), responseMetadata.workflowKey(), responseMetadata.status(),
-                    responseMetadata.processedAt(), true);
-            return ResponseEntity.status(idempotencyRecord.httpStatus())
-                    .body(new WorkflowResponse(replayedResponseMetadata, originalResponse.payload(), null));
-        } catch (Exception exception) {
-            throw new IllegalStateException("Cannot restore saved response.", exception);
-        }
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public ResponseEntity<WorkflowResponse> executeTransactionalCommand(WorkflowCommand command, String ownerToken) {
+        // Redis retries become eligible only after JDBC confirms that the transaction rolled back.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    idempotencyRepository.markRetryable(command.metadata().idempotencyKey(), ownerToken);
+                }
+            }
+        });
+        return dispatchWorkflowCommand(command);
     }
 
     public ResponseEntity<WorkflowResponse> dispatchWorkflowCommand(WorkflowCommand command) {

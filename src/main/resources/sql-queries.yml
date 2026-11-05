@@ -51,22 +51,6 @@ transition-history:
         ON target_state.fk_id_workflow_definition = instance.fk_id_workflow_definition AND target_state.state_code = :targetState
     WHERE instance.reference_id = :referenceId AND instance.fk_id_workflow_definition = :definitionId
 
-idempotency:
-  exists-by-key: |
-    SELECT COUNT(*) > 0
-    FROM workflow_brain.workflow_request_replay
-    WHERE idempotency_key = :key
-  reserve-key: |
-    INSERT INTO workflow_brain.workflow_request_replay (idempotency_key, request_fingerprint)
-    VALUES (:key, :fingerprint)
-  find-and-lock-by-key: |
-    SELECT id, request_fingerprint, response_json, http_status
-    FROM workflow_brain.workflow_request_replay
-    WHERE idempotency_key = :key FOR UPDATE
-  save-successful-response: |
-    UPDATE workflow_brain.workflow_request_replay SET response_json = :response,
-    http_status = :status, completed_at = CURRENT_TIMESTAMP WHERE idempotency_key = :key
-
 workflow-instance:
   insert: |
     INSERT INTO workflow_brain.workflow_instances (reference_id, fk_id_workflow_definition, fk_id_workflow_state)

@@ -84,7 +84,11 @@ public class WorkflowController {
             requestId, and set idempotencyReplayed=true. This snapshot may be older than current
             progress; use GET_STATE for the latest state. Omitted workflowKey and onboarding
             are equivalent on CREATE. Different inputs with the same key return 409.
-            Failed attempts keep the key bound to their inputs but do not save a success response.
+            Idempotency records are stored in Redis without automatic expiration. Confirmed
+            database rollbacks permit retry with the same inputs. Concurrent or uncertain
+            requests return IDEMPOTENCY_IN_PROGRESS (409); Redis failures return
+            IDEMPOTENCY_UNAVAILABLE (503). A database commit and Redis response storage
+            are separate: an interrupted post-commit save requires recovery, not a new key.
 
             Errors have payload=null and error.code/description. Metadata is echoed when
             recoverable; binding failures may omit caller metadata. X-Correlation-Id traces
@@ -265,7 +269,7 @@ public class WorkflowController {
                                         }
                                         """)
                         })),
-        @ApiResponse(responseCode = "409", description = "Workflow already exists, event is not allowed in the current state, retry inputs conflict.",
+        @ApiResponse(responseCode = "409", description = "Workflow already exists, event is not allowed in the current state, retry inputs conflict, or the key is already processing.",
                 headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "Server-generated ID for this HTTP attempt.",
                         schema = @Schema(type = "string", format = "uuid")),
                 content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -286,6 +290,12 @@ public class WorkflowController {
                                           "payload": null,
                                           "error": {"code":"EVENT_NOT_ALLOWED","description":"OTP_VERIFIED is not allowed while the workflow is COMPLETED."}
                                         }
+                                        """),
+                            @ExampleObject(name = ApiErrorConstants.IDEMPOTENCY_IN_PROGRESS,
+                                    value = """
+                                        {"metadata":{"status":"FAILED","processedAt":"2026-11-04T06:00:00Z"},
+                                         "payload":null,"error":{"code":"IDEMPOTENCY_IN_PROGRESS",
+                                         "description":"This command is processing or requires recovery. Retry later with the same idempotency key."}}
                                         """),
                             @ExampleObject(name = ApiErrorConstants.IDEMPOTENCY_CONFLICT,
                                     value = """
@@ -326,6 +336,17 @@ public class WorkflowController {
                                         }
                                         """)
                         })),
+        @ApiResponse(responseCode = "503", description = "Redis is unavailable or idempotency ownership was lost. Retry with the same key; do not create a new key.",
+                headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "HTTP attempt correlation ID.",
+                        schema = @Schema(type = "string", format = "uuid")),
+                content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = @Schema(implementation = WorkflowResponse.class),
+                        examples = @ExampleObject(name = ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
+                                value = """
+                                    {"metadata":{"status":"FAILED","processedAt":"2026-11-04T06:00:00Z"},
+                                     "payload":null,"error":{"code":"IDEMPOTENCY_UNAVAILABLE",
+                                     "description":"Idempotency storage is unavailable. Retry with the same idempotency key."}}
+                                    """))),
         @ApiResponse(responseCode = "500", description = "Unexpected database, persistence, action or execution failure. Mutation rolls back; details are logged server-side.",
                 headers = @Header(name = WorkflowConstants.CORRELATION_ID_HEADER, description = "Server-generated ID for this HTTP attempt.",
                         schema = @Schema(type = "string", format = "uuid")),
