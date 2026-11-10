@@ -1,6 +1,5 @@
 package com.example.statemachine.statemachine;
 
-import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.workflow.WorkflowActionBinding;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
@@ -10,6 +9,7 @@ import com.example.statemachine.enums.LogValueSanitizerFunction;
 import com.example.statemachine.repository.JdbcWorkflowDefinitionRepository;
 import java.util.*;
 import java.util.function.Function;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.config.model.DefaultStateMachineModel;
@@ -42,43 +42,52 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
         // Spring StateMachine requires a string machine identifier at this framework boundary.
         Integer definitionId = Integer.valueOf(stateMachineId);
-        WorkflowDefinition workflowDefinition = definitionRepository.loadWorkflowDefinition(definitionId);
+        WorkflowDefinition workflowDefinition =
+                definitionRepository.loadWorkflowDefinition(definitionId);
         validateWorkflowStructure(workflowDefinition);
 
         List<StateData<String, String>> states =
                 workflowDefinition.states().stream()
-                .map( workflowStateDefinition -> {
+                        .map(
+                                workflowStateDefinition -> {
+                                    StateData<String, String> stateData =
+                                            new StateData<String, String>(
+                                                    workflowStateDefinition.code(),
+                                                    workflowStateDefinition.initial());
 
-                            StateData<String, String> stateData =
-                                new StateData<String, String>(workflowStateDefinition.code(), workflowStateDefinition.initial());
-
-                            stateData.setEnd(workflowStateDefinition.terminal());
-                            stateData.setEntryActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_ENTRY));
-                            stateData.setExitActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_EXIT));
-                            stateData.setStateActions(resolveStateActions(workflowStateDefinition, WorkflowConstants.ACTION_PHASE_STATE));
-                            return stateData;
-                        }
-                )
-                .toList();
+                                    stateData.setEnd(workflowStateDefinition.terminal());
+                                    stateData.setEntryActions(
+                                            resolveStateActions(
+                                                    workflowStateDefinition,
+                                                    WorkflowConstants.ACTION_PHASE_ENTRY));
+                                    stateData.setExitActions(
+                                            resolveStateActions(
+                                                    workflowStateDefinition,
+                                                    WorkflowConstants.ACTION_PHASE_EXIT));
+                                    stateData.setStateActions(
+                                            resolveStateActions(
+                                                    workflowStateDefinition,
+                                                    WorkflowConstants.ACTION_PHASE_STATE));
+                                    return stateData;
+                                })
+                        .toList();
 
         List<TransitionData<String, String>> transitions =
                 workflowDefinition.transitions().stream()
-                .map( workflowTransition -> new TransitionData<String, String>(
-                        workflowTransition.source(),
-                        workflowTransition.target(),
-                        workflowTransition.event(),
-                        resolveTransitionActions(workflowTransition.actionNames()),
-                        null,
-                        TransitionKind.valueOf(workflowTransition.kind())
-                    )
-                )
-                .toList();
+                        .map(
+                                workflowTransition ->
+                                        new TransitionData<String, String>(
+                                                workflowTransition.source(),
+                                                workflowTransition.target(),
+                                                workflowTransition.event(),
+                                                resolveTransitionActions(
+                                                        workflowTransition.actionNames()),
+                                                null,
+                                                TransitionKind.valueOf(workflowTransition.kind())))
+                        .toList();
 
         return new DefaultStateMachineModel<>(
-                null,
-                new StatesData<>(states),
-                new TransitionsData<>(transitions)
-        );
+                null, new StatesData<>(states), new TransitionsData<>(transitions));
     }
 
     private Collection<Function<StateContext<String, String>, Mono<Void>>> resolveStateActions(
@@ -86,18 +95,22 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
         List<Function<StateContext<String, String>, Mono<Void>>> orderedActions =
                 stateDefinition.actions().stream()
-                .filter(actionBinding -> actionBinding.phase().equals(actionPhase))
-                .sorted(Comparator.comparingInt(WorkflowActionBinding::order))
-                .map(actionBinding -> resolveActionWithErrorHandling(actionBinding.actionName()))
-                .toList();
+                        .filter(actionBinding -> actionBinding.phase().equals(actionPhase))
+                        .sorted(Comparator.comparingInt(WorkflowActionBinding::order))
+                        .map(
+                                actionBinding ->
+                                        resolveActionWithErrorHandling(actionBinding.actionName()))
+                        .toList();
 
         return orderedActions.isEmpty()
                 ? List.of()
-                : List.of( stateContext ->
-                            Flux.fromIterable(orderedActions)
-                            .concatMap(actionFunction -> actionFunction.apply(stateContext))
-                            .then()
-                );
+                : List.of(
+                        stateContext ->
+                                Flux.fromIterable(orderedActions)
+                                        .concatMap(
+                                                actionFunction ->
+                                                        actionFunction.apply(stateContext))
+                                        .then());
     }
 
     private Collection<Function<StateContext<String, String>, Mono<Void>>> resolveTransitionActions(
@@ -105,34 +118,47 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
         List<Function<StateContext<String, String>, Mono<Void>>> orderedActions =
                 actionNames.stream()
-                .map(behaviorCode -> resolveActionWithErrorHandling(behaviorCode))
-                .toList();
+                        .map(behaviorCode -> resolveActionWithErrorHandling(behaviorCode))
+                        .toList();
 
         return orderedActions.isEmpty()
                 ? List.of()
-                : List.of( stateContext ->
-                        Flux.fromIterable(orderedActions)
-                        .concatMap(actionFunction -> actionFunction.apply(stateContext))
-                        .then()
-                );
+                : List.of(
+                        stateContext ->
+                                Flux.fromIterable(orderedActions)
+                                        .concatMap(
+                                                actionFunction ->
+                                                        actionFunction.apply(stateContext))
+                                        .then());
     }
 
-    private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(String behaviorCode) {
+    private Function<StateContext<String, String>, Mono<Void>> resolveActionWithErrorHandling(
+            String behaviorCode) {
 
-        Function<StateContext<String, String>, Mono<Void>> actionFunction = behaviorRegistry.resolveActionByName(behaviorCode);
-        return stateContext -> Mono.defer(() -> actionFunction.apply(stateContext))
-                .doOnError(
-                        error -> {
-                            log.error("workflow_action_failed action={}", LogValueSanitizerFunction.SANITIZE.apply(behaviorCode), error);
-                            stateContext.getStateMachine().setStateMachineError(
-                                    new IllegalStateException("Workflow action failed: " + behaviorCode, error));
-                        }
-                );
+        Function<StateContext<String, String>, Mono<Void>> actionFunction =
+                behaviorRegistry.resolveActionByName(behaviorCode);
+        return stateContext ->
+                Mono.defer(() -> actionFunction.apply(stateContext))
+                        .doOnError(
+                                error -> {
+                                    log.error(
+                                            "workflow_action_failed action={}",
+                                            LogValueSanitizerFunction.SANITIZE.apply(behaviorCode),
+                                            error);
+                                    stateContext
+                                            .getStateMachine()
+                                            .setStateMachineError(
+                                                    new IllegalStateException(
+                                                            "Workflow action failed: "
+                                                                    + behaviorCode,
+                                                            error));
+                                });
     }
 
     private void validateWorkflowStructure(WorkflowDefinition workflowDefinition) {
 
-        if (workflowDefinition.states().stream().filter(WorkflowStateDefinition::initial).count() != 1) {
+        if (workflowDefinition.states().stream().filter(WorkflowStateDefinition::initial).count()
+                != 1) {
             throw new IllegalStateException("Workflow must have exactly one initial state.");
         }
 
@@ -142,28 +168,28 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
 
         for (WorkflowTransitionDefinition workflowTransition : workflowDefinition.transitions()) {
             if (workflowDefinition.getState(workflowTransition.source()).terminal()) {
-                throw new IllegalStateException("Terminal states cannot have outgoing transitions.");
+                throw new IllegalStateException(
+                        "Terminal states cannot have outgoing transitions.");
             }
             workflowDefinition.getState(workflowTransition.target());
         }
 
         Set<String> reachableStates = new HashSet<String>();
 
-        //add initial state
+        // add initial state
         reachableStates.add(
-                workflowDefinition.states()
-                .stream()
-                .filter(WorkflowStateDefinition::initial)
-                .findFirst()
-                .orElseThrow()
-                .code()
-        );
+                workflowDefinition.states().stream()
+                        .filter(WorkflowStateDefinition::initial)
+                        .findFirst()
+                        .orElseThrow()
+                        .code());
 
         boolean reachableStatesChanged;
         do {
             reachableStatesChanged = false;
-            for (WorkflowTransitionDefinition workflowTransition : workflowDefinition.transitions()) {
-                if (reachableStates.contains(workflowTransition.source())){
+            for (WorkflowTransitionDefinition workflowTransition :
+                    workflowDefinition.transitions()) {
+                if (reachableStates.contains(workflowTransition.source())) {
                     reachableStatesChanged |= reachableStates.add(workflowTransition.target());
                 }
             }
@@ -172,6 +198,5 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
         if (reachableStates.size() != workflowDefinition.states().size()) {
             throw new IllegalStateException("Workflow contains unreachable states.");
         }
-
     }
 }

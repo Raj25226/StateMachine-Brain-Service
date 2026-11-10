@@ -13,7 +13,9 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-/** Strict binding of the command envelope; operation-specific validation remains in the validator. */
+/**
+ * Strict binding of the command envelope; operation-specific validation remains in the validator.
+ */
 public class WorkflowRequestTypeAdapter extends TypeAdapter<WorkflowRequest> {
     @Override
     public WorkflowRequest read(JsonReader reader) throws IOException {
@@ -54,7 +56,8 @@ public class WorkflowRequestTypeAdapter extends TypeAdapter<WorkflowRequest> {
                 throw new JsonSyntaxException("Duplicate metadata property: " + property);
             }
             if (reader.peek() != JsonToken.STRING) {
-                throw new JsonSyntaxException("Metadata values must be non-null strings: " + property);
+                throw new JsonSyntaxException(
+                        "Metadata values must be non-null strings: " + property);
             }
             String value = reader.nextString();
             switch (property) {
@@ -99,12 +102,18 @@ public class WorkflowRequestTypeAdapter extends TypeAdapter<WorkflowRequest> {
             } else {
                 WorkflowRequestMetadata metadata = request.metadata();
                 writer.beginObject()
-                        .name(ApiPropertyConstants.OPERATION).value(metadata.getOperation())
-                        .name(ApiPropertyConstants.REQUEST_ID).value(metadata.getRequestId())
-                        .name(ApiPropertyConstants.REFERENCE_ID).value(metadata.getReferenceId())
-                        .name(ApiPropertyConstants.EVENT).value(metadata.getEvent())
-                        .name(ApiPropertyConstants.IDEMPOTENCY_KEY).value(metadata.getIdempotencyKey())
-                        .name(ApiPropertyConstants.WORKFLOW_KEY).value(metadata.getWorkflowKey())
+                        .name(ApiPropertyConstants.OPERATION)
+                        .value(metadata.getOperation())
+                        .name(ApiPropertyConstants.REQUEST_ID)
+                        .value(metadata.getRequestId())
+                        .name(ApiPropertyConstants.REFERENCE_ID)
+                        .value(metadata.getReferenceId())
+                        .name(ApiPropertyConstants.EVENT)
+                        .value(metadata.getEvent())
+                        .name(ApiPropertyConstants.IDEMPOTENCY_KEY)
+                        .value(metadata.getIdempotencyKey())
+                        .name(ApiPropertyConstants.WORKFLOW_KEY)
+                        .value(metadata.getWorkflowKey())
                         .endObject();
             }
             writer.name(ApiPropertyConstants.PAYLOAD);

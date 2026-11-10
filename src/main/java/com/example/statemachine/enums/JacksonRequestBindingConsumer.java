@@ -11,7 +11,8 @@ public enum JacksonRequestBindingConsumer implements Consumer<JsonMapper.Builder
 
     @Override
     public void accept(JsonMapper.Builder jsonMapperBuilder) {
-        jsonMapperBuilder.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        jsonMapperBuilder
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .withCoercionConfig(LogicalType.Textual, JsonTextCoercionConsumer.STRICT_TEXT);
     }
 }

@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** Redis idempotency key namespace and atomic-operation resources. */
 public final class RedisConstants {
-    private RedisConstants() { }
+    private RedisConstants() {}
 
     public static final String IDEMPOTENCY_KEY_PREFIX = "workflow:idempotency:";
     public static final String CLAIM_SCRIPT = "redis/idempotency-claim.lua";

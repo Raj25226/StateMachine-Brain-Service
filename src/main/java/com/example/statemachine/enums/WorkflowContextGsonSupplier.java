@@ -14,7 +14,8 @@ public enum WorkflowContextGsonSupplier implements Supplier<Gson> {
         return new GsonBuilder()
                 .serializeNulls()
                 .setStrictness(Strictness.STRICT)
-                .setObjectToNumberStrategy(reader -> JsonNumberParserFunction.PARSE.apply(reader.nextString()))
+                .setObjectToNumberStrategy(
+                        reader -> JsonNumberParserFunction.PARSE.apply(reader.nextString()))
                 .create();
     }
 }

@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** JDBC result-column labels and named SQL parameter keys. */
 public final class DatabaseConstants {
-    private DatabaseConstants() { }
+    private DatabaseConstants() {}
 
     public static final String COLUMN_ID = "id";
     public static final String COLUMN_FK_ID_WORKFLOW_ACTION = "fk_id_workflow_action";

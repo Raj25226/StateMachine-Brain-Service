@@ -1,24 +1,28 @@
 package com.example.statemachine.repository;
 
-import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.DatabaseConstants;
 import com.example.statemachine.constants.SqlQueryConstants;
 import com.example.statemachine.enums.SqlQueryFunction;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.AllArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/**
- * Append-only records of applied events; participates in the caller's workflow transaction.
- */
+/** Append-only records of applied events; participates in the caller's workflow transaction. */
 @Repository
 @AllArgsConstructor
 public class JdbcWorkflowHistoryRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public void recordTransition(String referenceId, Integer definitionId, String sourceState,
-                                 String event, String targetState, String requestId, String idempotencyKey) {
+    public void recordTransition(
+            String referenceId,
+            Integer definitionId,
+            String sourceState,
+            String event,
+            String targetState,
+            String requestId,
+            String idempotencyKey) {
 
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(DatabaseConstants.PARAM_REFERENCE_ID, referenceId);
@@ -30,11 +34,14 @@ public class JdbcWorkflowHistoryRepository {
         parameters.put(DatabaseConstants.PARAM_IDEMPOTENCY_KEY, idempotencyKey);
 
         final String sql =
-                SqlQueryFunction.GET_QUERY.apply(SqlQueryConstants.TRANSITION_HISTORY_PARENT, SqlQueryConstants.INSERT_TRANSITION_HISTORY);
+                SqlQueryFunction.GET_QUERY.apply(
+                        SqlQueryConstants.TRANSITION_HISTORY_PARENT,
+                        SqlQueryConstants.INSERT_TRANSITION_HISTORY);
 
         int insertedRowCount = jdbcTemplate.update(sql, parameters);
         if (insertedRowCount != 1) {
-            throw new IllegalStateException("Workflow instance or transition states were not found while recording history.");
+            throw new IllegalStateException(
+                    "Workflow instance or transition states were not found while recording history.");
         }
     }
 }

@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** JSON property names shared by API validation, documentation and metadata handling. */
 public final class ApiPropertyConstants {
-    private ApiPropertyConstants() { }
+    private ApiPropertyConstants() {}
 
     public static final String METADATA = "metadata";
     public static final String PAYLOAD = "payload";

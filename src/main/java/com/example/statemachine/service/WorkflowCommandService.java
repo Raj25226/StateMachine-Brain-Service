@@ -1,7 +1,5 @@
 package com.example.statemachine.service;
 
-import lombok.AllArgsConstructor;
-import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowDetails;
@@ -11,6 +9,7 @@ import com.example.statemachine.dto.workflow.WorkflowCommand;
 import com.example.statemachine.enums.WorkflowOperation;
 import com.example.statemachine.repository.RedisWorkflowIdempotencyRepository;
 import java.time.Instant;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,16 +28,19 @@ public class WorkflowCommandService {
     private final RedisWorkflowIdempotencyRepository idempotencyRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public ResponseEntity<WorkflowResponse> executeTransactionalCommand(WorkflowCommand command, String ownerToken) {
+    public ResponseEntity<WorkflowResponse> executeTransactionalCommand(
+            WorkflowCommand command, String ownerToken) {
         // Redis retries become eligible only after JDBC confirms that the transaction rolled back.
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == STATUS_ROLLED_BACK) {
-                    idempotencyRepository.markRetryable(command.metadata().idempotencyKey(), ownerToken);
-                }
-            }
-        });
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status == STATUS_ROLLED_BACK) {
+                            idempotencyRepository.markRetryable(
+                                    command.metadata().idempotencyKey(), ownerToken);
+                        }
+                    }
+                });
         return dispatchWorkflowCommand(command);
     }
 
@@ -47,23 +49,39 @@ public class WorkflowCommandService {
         WorkflowCommandMetadata requestMetadata = command.metadata();
         WorkflowDetails workflowDetails;
         try {
-            workflowDetails = switch (command.operation()) {
-                case CREATE -> workflowExecutionService.createWorkflow(
-                        requestMetadata.referenceId(), requestMetadata.workflowKey());
-                case GET_STATE -> workflowExecutionService.getWorkflowState(requestMetadata.referenceId());
-                case SUBMIT_EVENT -> workflowExecutionService.submitEvent(requestMetadata);
-            };
+            workflowDetails =
+                    switch (command.operation()) {
+                        case CREATE ->
+                                workflowExecutionService.createWorkflow(
+                                        requestMetadata.referenceId(),
+                                        requestMetadata.workflowKey());
+                        case GET_STATE ->
+                                workflowExecutionService.getWorkflowState(
+                                        requestMetadata.referenceId());
+                        case SUBMIT_EVENT -> workflowExecutionService.submitEvent(requestMetadata);
+                    };
         } catch (RuntimeException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new IllegalStateException("Workflow execution failed.", exception);
         }
 
-        WorkflowResponseMetadata responseMetadata = new WorkflowResponseMetadata(
-                requestMetadata.operation(), requestMetadata.requestId(), requestMetadata.referenceId(),
-                requestMetadata.event(), requestMetadata.idempotencyKey(), workflowDetails.workflowKey(),
-                WorkflowConstants.STATUS_SUCCESS, Instant.now(), requestMetadata.idempotencyKey() == null ? null : false);
-        HttpStatus httpStatus = command.operation() == WorkflowOperation.CREATE ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(httpStatus).body(new WorkflowResponse(responseMetadata, workflowDetails, null));
+        WorkflowResponseMetadata responseMetadata =
+                new WorkflowResponseMetadata(
+                        requestMetadata.operation(),
+                        requestMetadata.requestId(),
+                        requestMetadata.referenceId(),
+                        requestMetadata.event(),
+                        requestMetadata.idempotencyKey(),
+                        workflowDetails.workflowKey(),
+                        WorkflowConstants.STATUS_SUCCESS,
+                        Instant.now(),
+                        requestMetadata.idempotencyKey() == null ? null : false);
+        HttpStatus httpStatus =
+                command.operation() == WorkflowOperation.CREATE
+                        ? HttpStatus.CREATED
+                        : HttpStatus.OK;
+        return ResponseEntity.status(httpStatus)
+                .body(new WorkflowResponse(responseMetadata, workflowDetails, null));
     }
 }

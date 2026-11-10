@@ -8,5 +8,4 @@ public record WorkflowTransitionDefinition(
         String event,
         String target,
         String kind,
-        List<String> actionNames
-) {}
+        List<String> actionNames) {}

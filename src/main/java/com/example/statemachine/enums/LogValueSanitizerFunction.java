@@ -13,6 +13,8 @@ public enum LogValueSanitizerFunction implements Function<String, String> {
             return LogConstants.MISSING_VALUE;
         }
         return value.substring(0, Math.min(value.length(), LogConstants.MAX_VALUE_LENGTH))
-                .replaceAll(LogConstants.CONTROL_CHARACTER_PATTERN, LogConstants.CONTROL_CHARACTER_REPLACEMENT);
+                .replaceAll(
+                        LogConstants.CONTROL_CHARACTER_PATTERN,
+                        LogConstants.CONTROL_CHARACTER_REPLACEMENT);
     }
 }

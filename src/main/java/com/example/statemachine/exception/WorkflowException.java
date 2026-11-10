@@ -22,7 +22,8 @@ public class WorkflowException extends RuntimeException {
     }
 
     public static WorkflowException invalid(String message) {
-        return new WorkflowException(HttpStatus.BAD_REQUEST, ApiErrorConstants.INVALID_REQUEST, message);
+        return new WorkflowException(
+                HttpStatus.BAD_REQUEST, ApiErrorConstants.INVALID_REQUEST, message);
     }
 
     public static WorkflowException conflict(String code, String message) {

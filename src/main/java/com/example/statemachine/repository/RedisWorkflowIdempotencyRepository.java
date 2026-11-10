@@ -35,26 +35,42 @@ public class RedisWorkflowIdempotencyRepository {
         retryScript.setResultType(Long.class);
     }
 
-    public WorkflowIdempotencyClaim claim(String idempotencyKey, String fingerprint, String ownerToken) {
+    public WorkflowIdempotencyClaim claim(
+            String idempotencyKey, String fingerprint, String ownerToken) {
         try {
-            List<?> result = redisTemplate.execute(claimScript, key(idempotencyKey), fingerprint, ownerToken);
+            List<?> result =
+                    redisTemplate.execute(
+                            claimScript, key(idempotencyKey), fingerprint, ownerToken);
             if (result == null || result.isEmpty()) {
                 throw new IllegalStateException("Redis returned an empty idempotency claim.");
             }
-            IdempotencyClaimOutcome outcome = IdempotencyClaimOutcome.valueOf((String) result.getFirst());
+            IdempotencyClaimOutcome outcome =
+                    IdempotencyClaimOutcome.valueOf((String) result.getFirst());
             return outcome == IdempotencyClaimOutcome.REPLAY
-                    ? new WorkflowIdempotencyClaim(outcome, (String) result.get(1), Integer.valueOf((String) result.get(2)))
+                    ? new WorkflowIdempotencyClaim(
+                            outcome,
+                            (String) result.get(1),
+                            Integer.valueOf((String) result.get(2)))
                     : new WorkflowIdempotencyClaim(outcome, null, null);
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }
     }
 
-    public void complete(String idempotencyKey, String ownerToken, String responseJson, int httpStatus) {
+    public void complete(
+            String idempotencyKey, String ownerToken, String responseJson, int httpStatus) {
         try {
-            Long completed = redisTemplate.execute(completeScript, key(idempotencyKey), ownerToken, responseJson, Integer.toString(httpStatus));
+            Long completed =
+                    redisTemplate.execute(
+                            completeScript,
+                            key(idempotencyKey),
+                            ownerToken,
+                            responseJson,
+                            Integer.toString(httpStatus));
             if (!Long.valueOf(1).equals(completed)) {
-                throw new WorkflowException(HttpStatus.SERVICE_UNAVAILABLE, ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
+                throw new WorkflowException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
                         "Idempotency ownership was lost after processing. Do not use a new retry key.");
             }
         } catch (DataAccessException exception) {
@@ -77,7 +93,9 @@ public class RedisWorkflowIdempotencyRepository {
 
     private WorkflowException unavailable(DataAccessException exception) {
         log.error("workflow_idempotency_store_unavailable", exception);
-        return new WorkflowException(HttpStatus.SERVICE_UNAVAILABLE, ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
+        return new WorkflowException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
                 "Idempotency storage is unavailable. Retry with the same idempotency key.");
     }
 }

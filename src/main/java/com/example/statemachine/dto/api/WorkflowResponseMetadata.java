@@ -11,5 +11,4 @@ public record WorkflowResponseMetadata(
         String workflowKey,
         String status,
         Instant processedAt,
-        Boolean idempotencyReplayed
-) { }
+        Boolean idempotencyReplayed) {}

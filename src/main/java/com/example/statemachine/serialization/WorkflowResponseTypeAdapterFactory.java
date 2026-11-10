@@ -21,38 +21,42 @@ public class WorkflowResponseTypeAdapterFactory implements TypeAdapterFactory {
         if (type.getRawType() != WorkflowResponse.class) {
             return null;
         }
-        TypeAdapter<WorkflowResponse> responseAdapter = gson.getDelegateAdapter(this, TypeToken.get(WorkflowResponse.class));
-        TypeAdapter<WorkflowResponseMetadata> metadataAdapter = gson.getAdapter(WorkflowResponseMetadata.class);
+        TypeAdapter<WorkflowResponse> responseAdapter =
+                gson.getDelegateAdapter(this, TypeToken.get(WorkflowResponse.class));
+        TypeAdapter<WorkflowResponseMetadata> metadataAdapter =
+                gson.getAdapter(WorkflowResponseMetadata.class);
         TypeAdapter<WorkflowDetails> detailsAdapter = gson.getAdapter(WorkflowDetails.class);
         TypeAdapter<ApiError> errorAdapter = gson.getAdapter(ApiError.class);
-        return (TypeAdapter<T>) new TypeAdapter<WorkflowResponse>() {
-            @Override
-            public WorkflowResponse read(JsonReader reader) throws IOException {
-                return responseAdapter.read(reader);
-            }
-
-            @Override
-            public void write(JsonWriter writer, WorkflowResponse response) throws IOException {
-                boolean serializeNulls = writer.getSerializeNulls();
-                writer.setSerializeNulls(false);
-                try {
-                    writer.beginObject().name(ApiPropertyConstants.METADATA);
-                    metadataAdapter.write(writer, response.metadata());
-                    writer.name(ApiPropertyConstants.PAYLOAD);
-                    if (response.payload() == null) {
-                        writer.setSerializeNulls(true);
-                        writer.nullValue();
-                        writer.setSerializeNulls(false);
-                    } else {
-                        detailsAdapter.write(writer, response.payload());
+        return (TypeAdapter<T>)
+                new TypeAdapter<WorkflowResponse>() {
+                    @Override
+                    public WorkflowResponse read(JsonReader reader) throws IOException {
+                        return responseAdapter.read(reader);
                     }
-                    writer.name(ApiPropertyConstants.ERROR);
-                    errorAdapter.write(writer, response.error());
-                    writer.endObject();
-                } finally {
-                    writer.setSerializeNulls(serializeNulls);
-                }
-            }
-        }.nullSafe();
+
+                    @Override
+                    public void write(JsonWriter writer, WorkflowResponse response)
+                            throws IOException {
+                        boolean serializeNulls = writer.getSerializeNulls();
+                        writer.setSerializeNulls(false);
+                        try {
+                            writer.beginObject().name(ApiPropertyConstants.METADATA);
+                            metadataAdapter.write(writer, response.metadata());
+                            writer.name(ApiPropertyConstants.PAYLOAD);
+                            if (response.payload() == null) {
+                                writer.setSerializeNulls(true);
+                                writer.nullValue();
+                                writer.setSerializeNulls(false);
+                            } else {
+                                detailsAdapter.write(writer, response.payload());
+                            }
+                            writer.name(ApiPropertyConstants.ERROR);
+                            errorAdapter.write(writer, response.error());
+                            writer.endObject();
+                        } finally {
+                            writer.setSerializeNulls(serializeNulls);
+                        }
+                    }
+                }.nullSafe();
     }
 }

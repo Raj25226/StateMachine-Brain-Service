@@ -17,43 +17,66 @@ public class WorkflowRequestValidator {
 
     public WorkflowCommand validate(WorkflowRequest request) {
         if (request == null || request.metadata() == null) {
-            throw WorkflowException.invalid(ApiPropertyConstants.METADATA + " must be a JSON object.");
+            throw WorkflowException.invalid(
+                    ApiPropertyConstants.METADATA + " must be a JSON object.");
         }
         if (request.payload() == null) {
-            throw WorkflowException.invalid(ApiPropertyConstants.PAYLOAD + " must be an empty JSON object.");
+            throw WorkflowException.invalid(
+                    ApiPropertyConstants.PAYLOAD + " must be an empty JSON object.");
         }
 
         WorkflowRequestMetadata metadata = request.metadata();
-        WorkflowOperation operation = WorkflowOperationParserFunction.PARSE.apply(metadata.getOperation());
-        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getRequestId(), ApiPropertyConstants.REQUEST_ID);
-        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getReferenceId(), ApiPropertyConstants.REFERENCE_ID);
+        WorkflowOperation operation =
+                WorkflowOperationParserFunction.PARSE.apply(metadata.getOperation());
+        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                metadata.getRequestId(), ApiPropertyConstants.REQUEST_ID);
+        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                metadata.getReferenceId(), ApiPropertyConstants.REFERENCE_ID);
         // TODO: Add PAN, mobile or email validation once supported reference types are defined.
 
         switch (operation) {
             case CREATE -> {
-                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
-                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(
+                        metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                        metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
                 if (metadata.getWorkflowKey() != null) {
-                    RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+                    RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                            metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
                 }
             }
             case GET_STATE -> {
-                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
-                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
-                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(
+                        metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(
+                        metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(
+                        metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
             }
             case SUBMIT_EVENT -> {
-                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getEvent(), ApiPropertyConstants.EVENT);
-                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
-                RequestMetadataValidationConsumer.FORBID_FIELD.accept(metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                        metadata.getEvent(), ApiPropertyConstants.EVENT);
+                RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                        metadata.getIdempotencyKey(), ApiPropertyConstants.IDEMPOTENCY_KEY);
+                RequestMetadataValidationConsumer.FORBID_FIELD.accept(
+                        metadata.getWorkflowKey(), ApiPropertyConstants.WORKFLOW_KEY);
             }
         }
 
-        String workflowKey = operation == WorkflowOperation.CREATE
-                ? (metadata.getWorkflowKey() == null ? WorkflowConstants.DEFAULT_WORKFLOW_KEY : metadata.getWorkflowKey())
-                : null;
-        return new WorkflowCommand(new WorkflowCommandMetadata(
-                metadata.getOperation(), metadata.getRequestId(), metadata.getReferenceId(),
-                metadata.getEvent(), metadata.getIdempotencyKey(), workflowKey), operation);
+        String workflowKey =
+                operation == WorkflowOperation.CREATE
+                        ? (metadata.getWorkflowKey() == null
+                                ? WorkflowConstants.DEFAULT_WORKFLOW_KEY
+                                : metadata.getWorkflowKey())
+                        : null;
+        return new WorkflowCommand(
+                new WorkflowCommandMetadata(
+                        metadata.getOperation(),
+                        metadata.getRequestId(),
+                        metadata.getReferenceId(),
+                        metadata.getEvent(),
+                        metadata.getIdempotencyKey(),
+                        workflowKey),
+                operation);
     }
 }

@@ -19,7 +19,8 @@ public class WorkflowIdempotencyInterceptor implements MethodInterceptor {
     private final Gson gson;
 
     // Resolve the service after advisors are ready so its JDBC transaction proxy is retained.
-    public WorkflowIdempotencyInterceptor(@Lazy WorkflowIdempotencyService workflowIdempotencyService, Gson gson) {
+    public WorkflowIdempotencyInterceptor(
+            @Lazy WorkflowIdempotencyService workflowIdempotencyService, Gson gson) {
         this.workflowIdempotencyService = workflowIdempotencyService;
         this.gson = gson;
     }

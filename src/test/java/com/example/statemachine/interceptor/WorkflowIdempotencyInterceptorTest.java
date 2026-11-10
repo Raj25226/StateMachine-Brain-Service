@@ -1,5 +1,7 @@
 package com.example.statemachine.interceptor;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.config.WorkflowIdempotencyConfiguration;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
@@ -30,8 +32,6 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class WorkflowIdempotencyInterceptorTest {
     private AnnotationConfigApplicationContext context;
     private WorkflowCommandGateway gateway;
@@ -45,26 +45,51 @@ class WorkflowIdempotencyInterceptorTest {
     @BeforeEach
     void startContext() {
         context = new AnnotationConfigApplicationContext();
-        context.register(WorkflowIdempotencyConfiguration.class, WorkflowIdempotencyInterceptor.class,
-                WorkflowCommandGateway.class, WorkflowIdempotencyService.class);
+        context.register(
+                WorkflowIdempotencyConfiguration.class,
+                WorkflowIdempotencyInterceptor.class,
+                WorkflowCommandGateway.class,
+                WorkflowIdempotencyService.class);
         context.registerBean(Gson.class, () -> gson);
         context.registerBean(RedisWorkflowIdempotencyRepository.class, () -> repository);
-        context.registerBean(WorkflowCommandService.class, () -> new WorkflowCommandService(null, repository) {
-            @Override
-            public ResponseEntity<WorkflowResponse> dispatchWorkflowCommand(WorkflowCommand command) {
-                executions++;
-                executionWasTransactional = TransactionSynchronizationManager.isActualTransactionActive();
-                if (failExecution) throw new IllegalStateException("Database write failed");
-                return response(command);
-            }
-        });
-        context.registerBean("transactionManager", AbstractPlatformTransactionManager.class,
-                () -> new AbstractPlatformTransactionManager() {
-                    @Override protected Object doGetTransaction() { return new Object(); }
-                    @Override protected void doBegin(Object transaction, TransactionDefinition definition) { }
-                    @Override protected void doCommit(DefaultTransactionStatus status) { committed = true; }
-                    @Override protected void doRollback(DefaultTransactionStatus status) { }
-                });
+        context.registerBean(
+                WorkflowCommandService.class,
+                () ->
+                        new WorkflowCommandService(null, repository) {
+                            @Override
+                            public ResponseEntity<WorkflowResponse> dispatchWorkflowCommand(
+                                    WorkflowCommand command) {
+                                executions++;
+                                executionWasTransactional =
+                                        TransactionSynchronizationManager
+                                                .isActualTransactionActive();
+                                if (failExecution)
+                                    throw new IllegalStateException("Database write failed");
+                                return response(command);
+                            }
+                        });
+        context.registerBean(
+                "transactionManager",
+                AbstractPlatformTransactionManager.class,
+                () ->
+                        new AbstractPlatformTransactionManager() {
+                            @Override
+                            protected Object doGetTransaction() {
+                                return new Object();
+                            }
+
+                            @Override
+                            protected void doBegin(
+                                    Object transaction, TransactionDefinition definition) {}
+
+                            @Override
+                            protected void doCommit(DefaultTransactionStatus status) {
+                                committed = true;
+                            }
+
+                            @Override
+                            protected void doRollback(DefaultTransactionStatus status) {}
+                        });
         context.refresh();
         gateway = context.getBean(WorkflowCommandGateway.class);
     }
@@ -75,13 +100,17 @@ class WorkflowIdempotencyInterceptorTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = WorkflowOperation.class, names = {"CREATE", "SUBMIT_EVENT"})
+    @EnumSource(
+            value = WorkflowOperation.class,
+            names = {"CREATE", "SUBMIT_EVENT"})
     void proxiedMutationsClaimRedisAndStoreResponseAfterCommit(WorkflowOperation operation) {
         WorkflowCommand command = command(operation);
         assertTrue(AopUtils.isAopProxy(gateway));
         assertEquals(response(command), gateway.executeWorkflowCommand(command));
         assertEquals(1, repository.claims);
-        assertEquals(WorkflowRequestFingerprintFunction.SHA_256.apply(command, gson), repository.fingerprint);
+        assertEquals(
+                WorkflowRequestFingerprintFunction.SHA_256.apply(command, gson),
+                repository.fingerprint);
         assertEquals(1, executions);
         assertTrue(executionWasTransactional);
         assertTrue(committed);
@@ -100,11 +129,15 @@ class WorkflowIdempotencyInterceptorTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = IdempotencyClaimOutcome.class, names = {"CONFLICT", "IN_PROGRESS"})
+    @EnumSource(
+            value = IdempotencyClaimOutcome.class,
+            names = {"CONFLICT", "IN_PROGRESS"})
     void rejectedClaimsDoNotExecuteOrCommit(IdempotencyClaimOutcome outcome) {
         repository.outcome = outcome;
-        WorkflowException exception = assertThrows(WorkflowException.class,
-                () -> gateway.executeWorkflowCommand(command(WorkflowOperation.CREATE)));
+        WorkflowException exception =
+                assertThrows(
+                        WorkflowException.class,
+                        () -> gateway.executeWorkflowCommand(command(WorkflowOperation.CREATE)));
         assertEquals("IDEMPOTENCY_" + outcome.name(), exception.code());
         assertEquals(0, executions);
         assertFalse(committed);
@@ -114,7 +147,8 @@ class WorkflowIdempotencyInterceptorTest {
     @Test
     void replayReturnsSavedResultWithoutExecutingTheCommand() {
         repository.outcome = IdempotencyClaimOutcome.REPLAY;
-        var result = gateway.executeWorkflowCommand(command(WorkflowOperation.CREATE));
+        ResponseEntity<WorkflowResponse> result =
+                gateway.executeWorkflowCommand(command(WorkflowOperation.CREATE));
         assertEquals(201, result.getStatusCode().value());
         assertTrue(result.getBody().metadata().idempotencyReplayed());
         assertEquals("request-1", result.getBody().metadata().requestId());
@@ -126,7 +160,8 @@ class WorkflowIdempotencyInterceptorTest {
     @Test
     void rollbackThroughTheInterceptorKeepsTheClaimRetryable() {
         failExecution = true;
-        assertThrows(IllegalStateException.class,
+        assertThrows(
+                IllegalStateException.class,
                 () -> gateway.executeWorkflowCommand(command(WorkflowOperation.CREATE)));
         assertTrue(repository.retryable);
         assertFalse(committed);
@@ -134,18 +169,34 @@ class WorkflowIdempotencyInterceptorTest {
     }
 
     private WorkflowCommand command(WorkflowOperation operation) {
-        return new WorkflowCommand(new WorkflowCommandMetadata(operation.name(), "request-1", "APP-101",
-                operation == WorkflowOperation.SUBMIT_EVENT ? "VERIFY_OTP" : null,
-                operation == WorkflowOperation.GET_STATE ? null : "key-1",
-                operation == WorkflowOperation.CREATE ? "onboarding" : null), operation);
+        return new WorkflowCommand(
+                new WorkflowCommandMetadata(
+                        operation.name(),
+                        "request-1",
+                        "APP-101",
+                        operation == WorkflowOperation.SUBMIT_EVENT ? "VERIFY_OTP" : null,
+                        operation == WorkflowOperation.GET_STATE ? null : "key-1",
+                        operation == WorkflowOperation.CREATE ? "finaag" : null),
+                operation);
     }
 
     private ResponseEntity<WorkflowResponse> response(WorkflowCommand command) {
-        var metadata = command.metadata();
+        WorkflowCommandMetadata metadata = command.metadata();
         return ResponseEntity.status(command.operation() == WorkflowOperation.CREATE ? 201 : 200)
-                .body(new WorkflowResponse(new WorkflowResponseMetadata(metadata.operation(), metadata.requestId(),
-                        metadata.referenceId(), metadata.event(), metadata.idempotencyKey(), metadata.workflowKey(),
-                        "SUCCESS", Instant.parse("2026-11-04T06:00:00Z"), false), null, null));
+                .body(
+                        new WorkflowResponse(
+                                new WorkflowResponseMetadata(
+                                        metadata.operation(),
+                                        metadata.requestId(),
+                                        metadata.referenceId(),
+                                        metadata.event(),
+                                        metadata.idempotencyKey(),
+                                        metadata.workflowKey(),
+                                        "SUCCESS",
+                                        Instant.parse("2026-11-04T06:00:00Z"),
+                                        false),
+                                null,
+                                null));
     }
 
     private class RecordingRepository extends RedisWorkflowIdempotencyRepository {
@@ -156,15 +207,20 @@ class WorkflowIdempotencyInterceptorTest {
         private boolean completed;
         private boolean retryable;
 
-        RecordingRepository() { super(null); }
+        RecordingRepository() {
+            super(null);
+        }
 
         @Override
-        public WorkflowIdempotencyClaim claim(String key, String requestFingerprint, String ownerToken) {
+        public WorkflowIdempotencyClaim claim(
+                String key, String requestFingerprint, String ownerToken) {
             claims++;
             fingerprint = requestFingerprint;
             owner = ownerToken;
-            return new WorkflowIdempotencyClaim(outcome,
-                    gson.toJson(response(command(WorkflowOperation.CREATE)).getBody()), 201);
+            return new WorkflowIdempotencyClaim(
+                    outcome,
+                    gson.toJson(response(command(WorkflowOperation.CREATE)).getBody()),
+                    201);
         }
 
         @Override
