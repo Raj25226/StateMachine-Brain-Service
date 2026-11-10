@@ -88,6 +88,63 @@ class RedisWorkflowIdempotencyIntegrationTest {
     }
 
     @Test
+    void completedClaimsExpireWithoutReplayOrStaleOwnersRefreshingTheTtl() throws Exception {
+        RedisWorkflowIdempotencyRepository expiring =
+                new RedisWorkflowIdempotencyRepository(template, 1);
+        String redisKey = RedisConstants.IDEMPOTENCY_KEY_PREFIX + key;
+        expiring.claim(key, "fingerprint", "owner-1");
+        assertEquals(-1L, template.getExpire(redisKey));
+        expiring.complete(key, "owner-1", "{}", 200);
+        assertTrue(template.getExpire(redisKey) > 0 && template.getExpire(redisKey) <= 60);
+        template.expire(redisKey, java.time.Duration.ofSeconds(10));
+        assertEquals(
+                IdempotencyClaimOutcome.REPLAY,
+                expiring.claim(key, "fingerprint", "owner-2").outcome());
+        assertEquals(
+                IdempotencyClaimOutcome.CONFLICT,
+                expiring.claim(key, "different", "owner-2").outcome());
+        expiring.markRetryable(key, "owner-1");
+        assertThrows(WorkflowException.class, () -> expiring.complete(key, "owner-1", "{}", 200));
+        assertTrue(template.getExpire(redisKey) > 0 && template.getExpire(redisKey) <= 10);
+        // Accelerate the clock on this disposable test key rather than waiting a minute.
+        template.expire(redisKey, java.time.Duration.ofMillis(1));
+        for (int attempt = 0;
+                attempt < 100 && Boolean.TRUE.equals(template.hasKey(redisKey));
+                attempt++) {
+            Thread.sleep(10);
+        }
+        assertFalse(template.hasKey(redisKey));
+        assertEquals(
+                IdempotencyClaimOutcome.CLAIMED,
+                expiring.claim(key, "different", "owner-3").outcome());
+        assertEquals(-1L, template.getExpire(redisKey));
+    }
+
+    @Test
+    void retryableClaimsExpireButReclaimedExecutionIsPersistent() {
+        RedisWorkflowIdempotencyRepository expiring =
+                new RedisWorkflowIdempotencyRepository(template, 2);
+        String redisKey = RedisConstants.IDEMPOTENCY_KEY_PREFIX + key;
+        expiring.claim(key, "fingerprint", "owner-1");
+        expiring.markRetryable(key, "wrong-owner");
+        assertEquals(-1L, template.getExpire(redisKey));
+        expiring.markRetryable(key, "owner-1");
+        assertTrue(template.getExpire(redisKey) > 0 && template.getExpire(redisKey) <= 120);
+        assertEquals(
+                IdempotencyClaimOutcome.CLAIMED,
+                expiring.claim(key, "fingerprint", "owner-2").outcome());
+        assertEquals(-1L, template.getExpire(redisKey));
+        expiring.markRetryable(key, "owner-1");
+        assertEquals(
+                IdempotencyClaimOutcome.IN_PROGRESS,
+                expiring.claim(key, "fingerprint", "owner-3").outcome());
+        assertEquals(-1L, template.getExpire(redisKey));
+        // Switching back to the default -1 keeps finalized records persistent.
+        repository.complete(key, "owner-2", "{}", 200);
+        assertEquals(-1L, template.getExpire(redisKey));
+    }
+
+    @Test
     void concurrentRequestsHaveOnlyOneOwner() throws Exception {
         List<Callable<IdempotencyClaimOutcome>> attempts = new ArrayList<>();
         for (int index = 0; index < 24; index++) {

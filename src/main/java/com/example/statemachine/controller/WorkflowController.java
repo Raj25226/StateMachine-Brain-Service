@@ -102,7 +102,9 @@ public class WorkflowController {
             requestId, and set idempotencyReplayed=true. This snapshot may be older than current
             progress; use GET_STATE for the latest state. Omitted workflowKey and finaag
             are equivalent on CREATE. Different inputs with the same key return 409.
-            Idempotency records are stored in Redis without automatic expiration. Confirmed
+            Redis retention is configured through workflow.idempotency.ttl-minutes: -1 means
+            no expiry; positive integers mean minutes for COMPLETED/RETRYABLE claims.
+            PROCESSING claims never expire, and replays do not extend retention. Confirmed
             database rollbacks permit retry with the same inputs. Concurrent or uncertain
             requests return IDEMPOTENCY_IN_PROGRESS (409); Redis failures return
             IDEMPOTENCY_UNAVAILABLE (503). A database commit and Redis response storage

@@ -66,6 +66,7 @@ schema inside that database.
 | `REDIS_PASSWORD` | empty |
 | `ACL_BASE_URL` | `http://localhost:8082` |
 | `ACL_TIMEOUT` | `10s` |
+| `IDEMPOTENCY_TTL_MINUTES` | `-1` (no expiry) |
 
 Start Redis separately with persistence and eviction settings appropriate for
 idempotency storage, for example:
@@ -162,6 +163,13 @@ Create a Lyntra instance with:
 Submit the commands in the table in order, each with its own idempotency key.
 SUBMIT_EVENT uses the instance reference to find the workflow; omit `workflowKey`
 on that operation. Event names determine business actions, not state ordering.
+
+## Postman collection
+
+Import [the collection](docs/postman/workflows.postman_collection.json) and
+[local environment](docs/postman/local.postman_environment.json). They cover both
+workflow sequences, direct ACL execution, state reads, idempotent replays and
+validation errors. See [usage instructions](docs/postman/README.md).
 
 ## API contract
 
@@ -312,7 +320,26 @@ changing JSON libraries does not invalidate saved idempotency reservations.
 ## Idempotency and transactions
 
 `CREATE` and `SUBMIT_EVENT` require an idempotency key; `GET_STATE` forbids one.
-Keys are global within the application and have no automatic expiration.
+Keys are global within the application. Configure retention in `application.yml`:
+
+```yaml
+workflow:
+  idempotency:
+    ttl-minutes: ${IDEMPOTENCY_TTL_MINUTES:-1}
+```
+
+Set `IDEMPOTENCY_TTL_MINUTES=-1` for no expiry (default), or a positive whole
+number of minutes, for example `IDEMPOTENCY_TTL_MINUTES=30`. Zero, other negative
+values, fractions and values exceeding the supported Redis expiry range are rejected
+at startup. Restart the service after changing the setting.
+
+The TTL starts atomically when a claim becomes COMPLETED or RETRYABLE after a
+confirmed rollback. PROCESSING claims remain persistent, including uncertain
+post-commit outcomes. Reclaiming RETRYABLE removes its expiry until execution ends.
+Replays and conflicts do not extend retention. After expiry, the key and fingerprint
+are forgotten; reuse is treated as a new request and may execute work again.
+Configuration changes apply on future completion/retryable transitions, not
+retroactively to untouched existing keys.
 
 A SHA-256 fingerprint binds each key to the operation, reference, event and
 normalized workflow key. `requestId` is excluded. Omitting `workflowKey` on
@@ -328,7 +355,7 @@ Redis stores fingerprints, claim status and successful response JSON under
 `workflow:idempotency:<idempotencyKey>`. Lua scripts atomically claim, complete and
 release a confirmed rollback. No idempotency table is used in PostgreSQL.
 
-A claim has one owner and no automatic takeover or expiration. Concurrent attempts
+A PROCESSING claim has one owner, no expiry and no automatic takeover. Concurrent attempts
 with the same inputs return `409 IDEMPOTENCY_IN_PROGRESS`; different inputs return
 `409 IDEMPOTENCY_CONFLICT`. A confirmed JDBC rollback marks the claim retryable
 without removing its fingerprint. State updates and transition history commit in

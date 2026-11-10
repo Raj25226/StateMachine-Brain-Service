@@ -7,6 +7,8 @@ import com.example.statemachine.enums.IdempotencyClaimOutcome;
 import com.example.statemachine.exception.WorkflowException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -18,12 +20,28 @@ import org.springframework.stereotype.Repository;
 @Slf4j
 public class RedisWorkflowIdempotencyRepository {
     private final StringRedisTemplate redisTemplate;
+    private final String ttlSeconds;
     private final DefaultRedisScript<List> claimScript;
     private final DefaultRedisScript<Long> completeScript;
     private final DefaultRedisScript<Long> retryScript;
 
     public RedisWorkflowIdempotencyRepository(StringRedisTemplate redisTemplate) {
+        this(redisTemplate, RedisConstants.INFINITE_TTL_MINUTES);
+    }
+
+    @Autowired
+    public RedisWorkflowIdempotencyRepository(
+            StringRedisTemplate redisTemplate,
+            @Value(RedisConstants.TTL_MINUTES_PROPERTY) long ttlMinutes) {
+        if (ttlMinutes != RedisConstants.INFINITE_TTL_MINUTES
+                && (ttlMinutes <= 0 || ttlMinutes > RedisConstants.MAX_TTL_MINUTES)) {
+            throw new IllegalArgumentException(RedisConstants.INVALID_TTL);
+        }
         this.redisTemplate = redisTemplate;
+        this.ttlSeconds =
+                Long.toString(
+                        ttlMinutes == RedisConstants.INFINITE_TTL_MINUTES ? -1 : ttlMinutes * 60);
+        log.info(RedisConstants.TTL_CONFIGURED, ttlMinutes);
         claimScript = new DefaultRedisScript<>();
         claimScript.setLocation(new ClassPathResource(RedisConstants.CLAIM_SCRIPT));
         claimScript.setResultType(List.class);
@@ -66,7 +84,8 @@ public class RedisWorkflowIdempotencyRepository {
                             key(idempotencyKey),
                             ownerToken,
                             responseJson,
-                            Integer.toString(httpStatus));
+                            Integer.toString(httpStatus),
+                            ttlSeconds);
             if (!Long.valueOf(1).equals(completed)) {
                 throw new WorkflowException(
                         HttpStatus.SERVICE_UNAVAILABLE,
@@ -80,7 +99,7 @@ public class RedisWorkflowIdempotencyRepository {
 
     public void markRetryable(String idempotencyKey, String ownerToken) {
         try {
-            redisTemplate.execute(retryScript, key(idempotencyKey), ownerToken);
+            redisTemplate.execute(retryScript, key(idempotencyKey), ownerToken, ttlSeconds);
         } catch (DataAccessException exception) {
             // Keep PROCESSING if recovery storage fails; automatic re-execution would be unsafe.
             log.error("workflow_idempotency_rollback_recovery_failed", exception);
