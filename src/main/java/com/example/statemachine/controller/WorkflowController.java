@@ -552,7 +552,7 @@ public class WorkflowController {
                     ApiPropertyConstants.REFERENCE_ID,
                     LogValueSanitizerFunction.SANITIZE.apply(requestMetadata.referenceId()));
             log.info(
-                    "workflow_command_received operation={} event={} referenceId={}",
+                    "Workflow command received | operation={} | event={} | referenceId={}",
                     LogValueSanitizerFunction.SANITIZE.apply(requestMetadata.operation()),
                     LogValueSanitizerFunction.SANITIZE.apply(requestMetadata.event()),
                     LogValueSanitizerFunction.SANITIZE.apply(requestMetadata.referenceId()));

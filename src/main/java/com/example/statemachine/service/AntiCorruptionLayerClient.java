@@ -1,6 +1,5 @@
 package com.example.statemachine.service;
 
-import com.example.statemachine.constants.LogConstants;
 import com.example.statemachine.constants.WorkflowConstants;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.workflow.WorkflowStepContext;
@@ -48,7 +47,7 @@ public class AntiCorruptionLayerClient {
         String action = LogValueSanitizerFunction.SANITIZE.apply(actionName);
         long started = System.nanoTime();
         log.info(
-                LogConstants.ACL_CALL_STARTED,
+                "Workflow ACL started | correlationId={} | workflow={} | version={} | action={} | requestId={}",
                 correlationId,
                 workflow,
                 context.definitionVersion(),
@@ -57,7 +56,7 @@ public class AntiCorruptionLayerClient {
         try {
             executeRemote(actionName, context, correlationId);
             log.info(
-                    LogConstants.ACL_CALL_COMPLETED,
+                    "Workflow ACL completed | correlationId={} | workflow={} | version={} | action={} | durationMs={}",
                     correlationId,
                     workflow,
                     context.definitionVersion(),
@@ -65,7 +64,7 @@ public class AntiCorruptionLayerClient {
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         } catch (Exception exception) {
             log.warn(
-                    LogConstants.ACL_CALL_FAILED,
+                    "Workflow ACL failed | correlationId={} | workflow={} | version={} | action={} | durationMs={} | failureType={}",
                     correlationId,
                     workflow,
                     context.definitionVersion(),
@@ -103,13 +102,16 @@ public class AntiCorruptionLayerClient {
             throw exception;
         }
         if (response.statusCode() != 200) {
-            log.warn(LogConstants.ACL_HTTP_REJECTED, correlationId, response.statusCode());
+            log.warn(
+                    "Workflow ACL HTTP rejected | correlationId={} | status={}",
+                    correlationId,
+                    response.statusCode());
             throw new IllegalStateException(
                     "ACL step execution failed with HTTP " + response.statusCode());
         }
         StepAcknowledgement result = gson.fromJson(response.body(), StepAcknowledgement.class);
         if (result == null || !"SUCCEEDED".equals(result.status())) {
-            log.warn(LogConstants.ACL_ACKNOWLEDGEMENT_INVALID, correlationId);
+            log.warn("Workflow ACL acknowledgement invalid | correlationId={}", correlationId);
             throw new IllegalStateException("ACL did not acknowledge successful step execution.");
         }
     }

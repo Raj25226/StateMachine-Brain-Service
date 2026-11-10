@@ -27,7 +27,7 @@ public class WorkflowIdempotencyService {
         String ownerToken = UUID.randomUUID().toString();
         WorkflowIdempotencyClaim claim = idempotencyRepository.claim(key, fingerprint, ownerToken);
         log.debug(
-                "workflow_idempotency_claim outcome={} operation={}",
+                "Workflow idempotency claim | outcome={} | operation={}",
                 claim.outcome(),
                 command.operation());
         return switch (claim.outcome()) {
@@ -69,7 +69,7 @@ public class WorkflowIdempotencyService {
                         metadata.status(),
                         metadata.processedAt(),
                         true);
-        log.debug("workflow_idempotency_replayed status={}", claim.httpStatus());
+        log.debug("Workflow idempotency replayed | status={}", claim.httpStatus());
         return ResponseEntity.status(claim.httpStatus())
                 .body(new WorkflowResponse(replayed, original.payload(), null));
     }

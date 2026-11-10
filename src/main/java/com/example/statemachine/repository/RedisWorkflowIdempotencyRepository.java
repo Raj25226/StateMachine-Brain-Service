@@ -41,7 +41,7 @@ public class RedisWorkflowIdempotencyRepository {
         this.ttlSeconds =
                 Long.toString(
                         ttlMinutes == RedisConstants.INFINITE_TTL_MINUTES ? -1 : ttlMinutes * 60);
-        log.info(RedisConstants.TTL_CONFIGURED, ttlMinutes);
+        log.info("Workflow idempotency TTL configured | minutes={}", ttlMinutes);
         claimScript = new DefaultRedisScript<>();
         claimScript.setLocation(new ClassPathResource(RedisConstants.CLAIM_SCRIPT));
         claimScript.setResultType(List.class);
@@ -102,7 +102,7 @@ public class RedisWorkflowIdempotencyRepository {
             redisTemplate.execute(retryScript, key(idempotencyKey), ownerToken, ttlSeconds);
         } catch (DataAccessException exception) {
             // Keep PROCESSING if recovery storage fails; automatic re-execution would be unsafe.
-            log.error("workflow_idempotency_rollback_recovery_failed", exception);
+            log.error("Workflow idempotency rollback recovery failed", exception);
         }
     }
 
@@ -111,7 +111,7 @@ public class RedisWorkflowIdempotencyRepository {
     }
 
     private WorkflowException unavailable(DataAccessException exception) {
-        log.error("workflow_idempotency_store_unavailable", exception);
+        log.error("Workflow idempotency store unavailable", exception);
         return new WorkflowException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,

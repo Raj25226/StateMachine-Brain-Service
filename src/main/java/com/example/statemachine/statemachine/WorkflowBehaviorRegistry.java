@@ -45,28 +45,28 @@ public class WorkflowBehaviorRegistry {
                     Actions.from(
                             context ->
                                     log.debug(
-                                            "workflow_state_entered state={}",
+                                            "Workflow state entered | state={}",
                                             LogValueSanitizerFunction.SANITIZE.apply(
                                                     context.getTarget().getId()))),
                     WorkflowBehaviorConstants.RECORD_STATE_EXIT,
                     Actions.from(
                             context ->
                                     log.debug(
-                                            "workflow_state_exited state={}",
+                                            "Workflow state exited | state={}",
                                             LogValueSanitizerFunction.SANITIZE.apply(
                                                     context.getSource().getId()))),
                     WorkflowBehaviorConstants.RECORD_TRANSITION,
                     Actions.from(
                             context ->
                                     log.debug(
-                                            "workflow_transition_action event={}",
+                                            "Workflow transition action | event={}",
                                             LogValueSanitizerFunction.SANITIZE.apply(
                                                     context.getEvent()))),
                     WorkflowBehaviorConstants.OBSERVE_STATE,
                     Actions.from(
                             context ->
                                     log.debug(
-                                            "workflow_state_activity definition={}",
+                                            "Workflow state activity | definition={}",
                                             LogValueSanitizerFunction.SANITIZE.apply(
                                                     context.getStateMachine().getId()))));
 

@@ -142,7 +142,7 @@ public class JdbcWorkflowModelFactory implements StateMachineModelFactory<String
                         .doOnError(
                                 error -> {
                                     log.error(
-                                            "workflow_action_failed action={}",
+                                            "Workflow action failed | action={}",
                                             LogValueSanitizerFunction.SANITIZE.apply(behaviorCode),
                                             error);
                                     stateContext

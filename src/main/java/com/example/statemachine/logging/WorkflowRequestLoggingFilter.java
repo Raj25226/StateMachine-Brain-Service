@@ -48,14 +48,14 @@ public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
         MDC.remove(ApiPropertyConstants.REFERENCE_ID);
         response.setHeader(WorkflowConstants.CORRELATION_ID_HEADER, correlationId);
         log.info(
-                "workflow_http_received correlationId={} method={} path={}",
+                "Workflow HTTP received | correlationId={} | method={} | path={}",
                 correlationId,
                 LogValueSanitizerFunction.SANITIZE.apply(request.getMethod()),
                 LogValueSanitizerFunction.SANITIZE.apply(request.getRequestURI()));
         try {
             chain.doFilter(request, response);
         } catch (IOException | ServletException | RuntimeException exception) {
-            log.error("workflow_http_failed correlationId={}", correlationId, exception);
+            log.error("Workflow HTTP failed | correlationId={}", correlationId, exception);
             throw exception;
         } finally {
             try {
@@ -80,10 +80,10 @@ public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
                                         ? Level.ERROR
                                         : response.getStatus() >= 400 ? Level.WARN : Level.INFO)
                         .log(
-                                "workflow_http_completed correlationId={} requestId={}"
-                                        + " referenceId={} operation={} event={} status={}"
-                                        + " currentState={} eventOutcome={} idempotencyReplayed={}"
-                                        + " errorCode={} durationMs={}",
+                                "Workflow HTTP completed | correlationId={} | requestId={}"
+                                        + " | referenceId={} | operation={} | event={} | status={}"
+                                        + " | currentState={} | eventOutcome={} | idempotencyReplayed={}"
+                                        + " | errorCode={} | durationMs={}",
                                 correlationId,
                                 LogValueSanitizerFunction.SANITIZE.apply(
                                         metadata == null ? null : metadata.requestId()),

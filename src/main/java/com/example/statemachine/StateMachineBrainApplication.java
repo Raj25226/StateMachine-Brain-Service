@@ -17,6 +17,6 @@ public class StateMachineBrainApplication {
     @EventListener(ApplicationReadyEvent.class)
     public void logReady() {
         log.info(
-                "workflow_service_ready endpoint=/api/workflows operations=CREATE,GET_STATE,SUBMIT_EVENT");
+                "Workflow service ready | endpoint=/api/workflows operations=CREATE,GET_STATE,SUBMIT_EVENT");
     }
 }

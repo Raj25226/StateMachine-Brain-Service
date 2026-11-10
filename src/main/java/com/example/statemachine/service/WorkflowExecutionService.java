@@ -55,7 +55,7 @@ public class WorkflowExecutionService {
                     referenceId, definitionId, stateMachine.getState().getId());
             stateMachinePersister.persist(stateMachine, referenceId);
             log.debug(
-                    "workflow_created definition={} state={}",
+                    "Workflow created | definition={} | state={}",
                     definitionId,
                     LogValueSanitizerFunction.SANITIZE.apply(stateMachine.getState().getId()));
             return buildWorkflowDetails(
@@ -75,7 +75,7 @@ public class WorkflowExecutionService {
                         workflowInstance.definitionId());
 
         log.debug(
-                "workflow_state_loaded definition={} state={}",
+                "Workflow state loaded | definition={} | state={}",
                 workflowInstance.definitionId(),
                 LogValueSanitizerFunction.SANITIZE.apply(workflowInstance.currentState()));
         return buildWorkflowDetails(
@@ -137,7 +137,7 @@ public class WorkflowExecutionService {
                                 workflowDefinition.version()));
 
         log.debug(
-                "workflow_event_processed event={} sourceState={} targetState={} outcome={}",
+                "Workflow event processed | event={} | sourceState={} | targetState={} | outcome={}",
                 LogValueSanitizerFunction.SANITIZE.apply(eventCode),
                 LogValueSanitizerFunction.SANITIZE.apply(eventResult.previousState()),
                 LogValueSanitizerFunction.SANITIZE.apply(eventResult.currentState()),

@@ -45,7 +45,7 @@ public class WorkflowCommandService {
     }
 
     public ResponseEntity<WorkflowResponse> dispatchWorkflowCommand(WorkflowCommand command) {
-        log.debug("workflow_command_dispatching operation={}", command.operation());
+        log.debug("Workflow command dispatching | operation={}", command.operation());
         WorkflowCommandMetadata requestMetadata = command.metadata();
         WorkflowDetails workflowDetails;
         try {

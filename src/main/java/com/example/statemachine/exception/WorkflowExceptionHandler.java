@@ -87,7 +87,7 @@ public class WorkflowExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WorkflowResponse> handleUnexpectedException(
             Exception exception, HttpServletRequest httpRequest) {
-        log.error("workflow_request_failed errorCode=INTERNAL_ERROR", exception);
+        log.error("Workflow request failed | errorCode=INTERNAL_ERROR", exception);
         return buildErrorResponse(
                 httpRequest,
                 HttpStatus.INTERNAL_SERVER_ERROR,
@@ -100,7 +100,10 @@ public class WorkflowExceptionHandler {
             HttpStatus httpStatus,
             String errorCode,
             String errorDescription) {
-        log.warn("workflow_request_rejected status={} errorCode={}", httpStatus.value(), errorCode);
+        log.warn(
+                "Workflow request rejected | status={} | errorCode={}",
+                httpStatus.value(),
+                errorCode);
         return buildErrorResponse(httpRequest, httpStatus, errorCode, errorDescription);
     }
 

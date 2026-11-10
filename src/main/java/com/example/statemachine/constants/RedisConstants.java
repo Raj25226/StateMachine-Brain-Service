@@ -13,5 +13,4 @@ public final class RedisConstants {
     public static final String TTL_MINUTES_PROPERTY = "${workflow.idempotency.ttl-minutes:-1}";
     public static final String INVALID_TTL =
             "Idempotency TTL must be -1 or positive whole minutes within the supported range.";
-    public static final String TTL_CONFIGURED = "workflow_idempotency_ttl_configured minutes={}";
 }
