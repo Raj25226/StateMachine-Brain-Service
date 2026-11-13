@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** Bounds and replacements for untrusted log metadata. */
 public final class LogConstants {
-    private LogConstants() { }
+    private LogConstants() {}
 
     public static final int MAX_VALUE_LENGTH = 1100000;
     public static final String MISSING_VALUE = "-";

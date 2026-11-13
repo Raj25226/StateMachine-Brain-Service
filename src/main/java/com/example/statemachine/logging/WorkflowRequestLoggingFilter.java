@@ -32,7 +32,8 @@ public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith(request.getContextPath() + WorkflowConstants.API_PATH_PREFIX);
+        return !request.getRequestURI()
+                .startsWith(request.getContextPath() + WorkflowConstants.API_PATH_PREFIX);
     }
 
     @Override
@@ -47,39 +48,56 @@ public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
         MDC.remove(ApiPropertyConstants.REFERENCE_ID);
         response.setHeader(WorkflowConstants.CORRELATION_ID_HEADER, correlationId);
         log.info(
-                "workflow_http_received correlationId={} method={} path={}",
+                "Workflow HTTP received | correlationId={} | method={} | path={}",
                 correlationId,
                 LogValueSanitizerFunction.SANITIZE.apply(request.getMethod()),
                 LogValueSanitizerFunction.SANITIZE.apply(request.getRequestURI()));
         try {
             chain.doFilter(request, response);
         } catch (IOException | ServletException | RuntimeException exception) {
-            log.error("workflow_http_failed correlationId={}", correlationId, exception);
+            log.error("Workflow HTTP failed | correlationId={}", correlationId, exception);
             throw exception;
         } finally {
             try {
                 WorkflowCommandMetadata metadata =
                         (WorkflowCommandMetadata)
                                 request.getAttribute(RequestAttributeConstants.METADATA_ATTRIBUTE);
-                WorkflowResponse workflowResponse = (WorkflowResponse) request.getAttribute(RequestAttributeConstants.RESPONSE_ATTRIBUTE);
-                WorkflowDetails workflowDetails = workflowResponse == null ? null : workflowResponse.payload();
+                WorkflowResponse workflowResponse =
+                        (WorkflowResponse)
+                                request.getAttribute(RequestAttributeConstants.RESPONSE_ATTRIBUTE);
+                WorkflowDetails workflowDetails =
+                        workflowResponse == null ? null : workflowResponse.payload();
                 String errorCode =
-                        workflowResponse == null || workflowResponse.error() == null ? null : workflowResponse.error().code();
-                Boolean idempotencyReplayed = workflowResponse == null ? null : workflowResponse.metadata().idempotencyReplayed();
-                log.atLevel(response.getStatus() >= 500 ? Level.ERROR
-                        : response.getStatus() >= 400 ? Level.WARN : Level.INFO)
+                        workflowResponse == null || workflowResponse.error() == null
+                                ? null
+                                : workflowResponse.error().code();
+                Boolean idempotencyReplayed =
+                        workflowResponse == null
+                                ? null
+                                : workflowResponse.metadata().idempotencyReplayed();
+                log.atLevel(
+                                response.getStatus() >= 500
+                                        ? Level.ERROR
+                                        : response.getStatus() >= 400 ? Level.WARN : Level.INFO)
                         .log(
-                                "workflow_http_completed correlationId={} requestId={}"
-                                    + " referenceId={} operation={} event={} status={}"
-                                    + " currentState={} eventOutcome={} idempotencyReplayed={}"
-                                    + " errorCode={} durationMs={}",
+                                "Workflow HTTP completed | correlationId={} | requestId={}"
+                                        + " | referenceId={} | operation={} | event={} | status={}"
+                                        + " | currentState={} | eventOutcome={} | idempotencyReplayed={}"
+                                        + " | errorCode={} | durationMs={}",
                                 correlationId,
-                                LogValueSanitizerFunction.SANITIZE.apply(metadata == null ? null : metadata.requestId()),
-                                LogValueSanitizerFunction.SANITIZE.apply(metadata == null ? null : metadata.referenceId()),
-                                LogValueSanitizerFunction.SANITIZE.apply(metadata == null ? null : metadata.operation()),
-                                LogValueSanitizerFunction.SANITIZE.apply(metadata == null ? null : metadata.event()),
+                                LogValueSanitizerFunction.SANITIZE.apply(
+                                        metadata == null ? null : metadata.requestId()),
+                                LogValueSanitizerFunction.SANITIZE.apply(
+                                        metadata == null ? null : metadata.referenceId()),
+                                LogValueSanitizerFunction.SANITIZE.apply(
+                                        metadata == null ? null : metadata.operation()),
+                                LogValueSanitizerFunction.SANITIZE.apply(
+                                        metadata == null ? null : metadata.event()),
                                 response.getStatus(),
-                                LogValueSanitizerFunction.SANITIZE.apply(workflowDetails == null ? null : workflowDetails.currentState()),
+                                LogValueSanitizerFunction.SANITIZE.apply(
+                                        workflowDetails == null
+                                                ? null
+                                                : workflowDetails.currentState()),
                                 workflowDetails == null ? null : workflowDetails.eventOutcome(),
                                 idempotencyReplayed,
                                 errorCode,
@@ -90,5 +108,4 @@ public class WorkflowRequestLoggingFilter extends OncePerRequestFilter {
             }
         }
     }
-
 }

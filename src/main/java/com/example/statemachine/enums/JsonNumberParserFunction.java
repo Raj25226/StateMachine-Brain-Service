@@ -9,7 +9,9 @@ public enum JsonNumberParserFunction implements Function<String, Number> {
 
     @Override
     public Number apply(String numberText) {
-        if (numberText.indexOf('.') >= 0 || numberText.indexOf('e') >= 0 || numberText.indexOf('E') >= 0) {
+        if (numberText.indexOf('.') >= 0
+                || numberText.indexOf('e') >= 0
+                || numberText.indexOf('E') >= 0) {
             return Double.valueOf(numberText);
         }
         BigInteger integerValue = new BigInteger(numberText);

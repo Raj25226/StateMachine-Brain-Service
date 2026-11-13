@@ -12,15 +12,22 @@ public enum WorkflowOperationParserFunction implements Function<String, Workflow
 
     @Override
     public WorkflowOperation apply(String operation) {
-        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(operation, ApiPropertyConstants.OPERATION);
+        RequestMetadataValidationConsumer.REQUIRE_NON_BLANK.accept(
+                operation, ApiPropertyConstants.OPERATION);
         try {
             return WorkflowOperation.valueOf(operation);
         } catch (IllegalArgumentException exception) {
-            String supportedOperations = Arrays.stream(WorkflowOperation.values())
-                    .map(Enum::name)
-                    .collect(Collectors.joining(", "));
-            throw WorkflowException.invalid(ApiPropertyConstants.METADATA + "." + ApiPropertyConstants.OPERATION
-                    + " must be one of: " + supportedOperations + ".");
+            String supportedOperations =
+                    Arrays.stream(WorkflowOperation.values())
+                            .map(Enum::name)
+                            .collect(Collectors.joining(", "));
+            throw WorkflowException.invalid(
+                    ApiPropertyConstants.METADATA
+                            + "."
+                            + ApiPropertyConstants.OPERATION
+                            + " must be one of: "
+                            + supportedOperations
+                            + ".");
         }
     }
 }

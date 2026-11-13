@@ -10,7 +10,11 @@ public enum RequestMetadataValidationConsumer implements BiConsumer<String, Stri
         @Override
         public void accept(String value, String propertyName) {
             if (!StringValidationPredicate.NON_BLANK.test(value)) {
-                throw WorkflowException.invalid(ApiPropertyConstants.METADATA + "." + propertyName + " must be a nonblank string.");
+                throw WorkflowException.invalid(
+                        ApiPropertyConstants.METADATA
+                                + "."
+                                + propertyName
+                                + " must be a nonblank string.");
             }
         }
     },
@@ -18,7 +22,11 @@ public enum RequestMetadataValidationConsumer implements BiConsumer<String, Stri
         @Override
         public void accept(String value, String propertyName) {
             if (value != null) {
-                throw WorkflowException.invalid(ApiPropertyConstants.METADATA + "." + propertyName + " is not allowed for this operation.");
+                throw WorkflowException.invalid(
+                        ApiPropertyConstants.METADATA
+                                + "."
+                                + propertyName
+                                + " is not allowed for this operation.");
             }
         }
     }

@@ -1,7 +1,7 @@
 package com.example.statemachine.statemachine;
 
-import lombok.AllArgsConstructor;
 import com.example.statemachine.repository.JdbcWorkflowStateMachinePersistence;
+import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.statemachine.config.EnableStateMachineFactory;
@@ -17,13 +17,14 @@ public class WorkflowEngineConfiguration extends StateMachineConfigurerAdapter<S
     private final JdbcWorkflowModelFactory workflowModelFactory;
 
     @Override
-    public void configure(StateMachineModelConfigurer<String, String> modelConfigurer) throws Exception {
-        modelConfigurer.withModel()
-                .factory(workflowModelFactory);
+    public void configure(StateMachineModelConfigurer<String, String> modelConfigurer)
+            throws Exception {
+        modelConfigurer.withModel().factory(workflowModelFactory);
     }
 
     @Bean
-    StateMachinePersister<String, String, String> workflowStateMachinePersister(JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence) {
+    StateMachinePersister<String, String, String> workflowStateMachinePersister(
+            JdbcWorkflowStateMachinePersistence workflowStateMachinePersistence) {
         return new DefaultStateMachinePersister<>(workflowStateMachinePersistence);
     }
 }

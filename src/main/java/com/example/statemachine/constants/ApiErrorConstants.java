@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** Stable API error codes returned to clients. */
 public final class ApiErrorConstants {
-    private ApiErrorConstants() { }
+    private ApiErrorConstants() {}
 
     public static final String INVALID_REQUEST = "INVALID_REQUEST";
     public static final String WORKFLOW_ALREADY_EXISTS = "WORKFLOW_ALREADY_EXISTS";

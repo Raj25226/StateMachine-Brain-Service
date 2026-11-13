@@ -10,9 +10,12 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      host: ${COMMON_DS_CACHE_REDIS_HOST:localhost}
+      port: ${COMMON_DS_CACHE_REDIS_PORT:6379}
+      password: ${COMMON_DS_CACHE_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${COMMON_DS_REDIS_TLS_ENABLED:false}
+      ca-cert: ${COMMON_DS_REDIS_CA_CERT:}
       connect-timeout: 2s
       timeout: 2s
 
@@ -28,3 +31,11 @@ server:
 logging:
   pattern:
     level: '%5p [correlationId:%X{correlationId:-} requestId:%X{requestId:-}]'
+
+acl:
+  base-url: ${ACL_BASE_URL:http://localhost:8082}
+  timeout: ${ACL_TIMEOUT:10s}
+
+workflow:
+  idempotency:
+    ttl-minutes: ${IDEMPOTENCY_TTL_MINUTES:120}

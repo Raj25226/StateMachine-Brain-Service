@@ -1,11 +1,14 @@
 package com.example.statemachine.constants;
 
-/** Fixed workflow, transport and fingerprint values. Keep fingerprint settings stable for saved retries. */
+/**
+ * Fixed workflow, transport and fingerprint values. Keep fingerprint settings stable for saved
+ * retries.
+ */
 public final class WorkflowConstants {
-    private WorkflowConstants() { }
+    private WorkflowConstants() {}
 
     public static final String FINGERPRINT_ALGORITHM = "SHA-256";
-    public static final String DEFAULT_WORKFLOW_KEY = "onboarding";
+    public static final String DEFAULT_WORKFLOW_KEY = "finaag";
     public static final String STATUS_SUCCESS = "SUCCESS";
     public static final String STATUS_FAILED = "FAILED";
     public static final String ACTION_PHASE_ENTRY = "ENTRY";

@@ -12,15 +12,20 @@ import java.util.Locale;
 import java.util.function.BiFunction;
 
 /** Computes the stable request fingerprint used by existing idempotency reservations. */
-public enum WorkflowRequestFingerprintFunction implements BiFunction<WorkflowCommand, Gson, String> {
+public enum WorkflowRequestFingerprintFunction
+        implements BiFunction<WorkflowCommand, Gson, String> {
     SHA_256;
 
     @Override
     public String apply(WorkflowCommand command, Gson gson) {
         WorkflowCommandMetadata commandMetadata = command.metadata();
         try {
-            WorkflowRequestFingerprint fingerprintInput = new WorkflowRequestFingerprint(
-                    command.operation(), commandMetadata.referenceId(), commandMetadata.event(), commandMetadata.workflowKey());
+            WorkflowRequestFingerprint fingerprintInput =
+                    new WorkflowRequestFingerprint(
+                            command.operation(),
+                            commandMetadata.referenceId(),
+                            commandMetadata.event(),
+                            commandMetadata.workflowKey());
             String fingerprintJson = gson.toJson(fingerprintInput);
             // Keep existing retry fingerprints stable across JSON libraries: uppercase control
             // escapes and literal Unicode line separators match the established wire format.
@@ -35,7 +40,10 @@ public enum WorkflowRequestFingerprintFunction implements BiFunction<WorkflowCom
                         if (decoded == '\u2028' || decoded == '\u2029') {
                             canonicalJson.append(decoded);
                         } else {
-                            canonicalJson.append('\\').append('u').append(hexadecimal.toUpperCase(Locale.ROOT));
+                            canonicalJson
+                                    .append('\\')
+                                    .append('u')
+                                    .append(hexadecimal.toUpperCase(Locale.ROOT));
                         }
                         index += 4;
                     } else {
@@ -45,12 +53,14 @@ public enum WorkflowRequestFingerprintFunction implements BiFunction<WorkflowCom
                     canonicalJson.append(character);
                 }
             }
-            byte[] serializedFingerprint = canonicalJson.toString().getBytes(StandardCharsets.UTF_8);
-            byte[] fingerprintDigest = MessageDigest.getInstance(WorkflowConstants.FINGERPRINT_ALGORITHM).digest(serializedFingerprint);
+            byte[] serializedFingerprint =
+                    canonicalJson.toString().getBytes(StandardCharsets.UTF_8);
+            byte[] fingerprintDigest =
+                    MessageDigest.getInstance(WorkflowConstants.FINGERPRINT_ALGORITHM)
+                            .digest(serializedFingerprint);
             return HexFormat.of().formatHex(fingerprintDigest);
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot fingerprint command.", exception);
         }
     }
-
 }

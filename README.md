@@ -1,16 +1,18 @@
 # State Machine Brain
 
-A database-configured workflow service for onboarding. Built with Java 25,
+A database-configured workflow service for Finaag and Lyntra. Built with Java 25,
 Spring Boot 4.1.1, Spring StateMachine 4.0.2, PostgreSQL, Redis, Flyway, JDBC and Gson.
 Persistence uses `NamedParameterJdbcTemplate`; there is no JPA.
 
-Callers request workflow steps using command events such as `VERIFY_OTP` and
-`UPDATE_PROFILE`. This service is intended to execute those tasks by calling
-external services, then advance the workflow after successful execution.
+The brain owns workflow definitions, state transitions, persistence and request
+idempotency. Business steps execute synchronously over HTTP in the separately
+runnable [anti-corruption-layer](../anti-corruption-layer/README.md) service.
+Only an explicit successful ACL response allows progress to be persisted.
 
-External integrations are not implemented yet. The current testing implementation
-only applies configured transitions, TODO step strategies and bookkeeping actions; `APPLIED` does not
-yet confirm OTP verification, profile updates or document uploads.
+The ACL provides default local implementations for all business steps. They log
+completion and succeed without external APIs. Replace each implementation body
+with its downstream call when ready; current success does not confirm a real
+OTP check, profile update, identity check, plan selection or document upload.
 
 ```text
 OTP_VERIFICATION --VERIFY_OTP--> PROFILE_DETAILS
@@ -43,12 +45,12 @@ export DB_URL='jdbc:postgresql://localhost:5432/workflow'
 export DB_USERNAME='admin'
 export DB_PASSWORD='admin'
 export SERVER_PORT='8081'
-export REDIS_HOST='localhost'
-export REDIS_PORT='6379'
+export COMMON_DS_CACHE_REDIS_HOST='localhost'
+export COMMON_DS_CACHE_REDIS_PORT='6379'
 mvn spring-boot:run
 ```
 
-The values above match the local defaults in
+Set the Redis host and port explicitly. The other values above match the local defaults in
 [application.yml](src/main/resources/application.yml). Change them for your
 PostgreSQL installation. `workflow` is the database name; `workflow_brain` is the
 schema inside that database.
@@ -59,9 +61,18 @@ schema inside that database.
 | `DB_USERNAME` | `admin` |
 | `DB_PASSWORD` | `admin` |
 | `SERVER_PORT` | `8081` |
-| `REDIS_HOST` | `localhost` |
-| `REDIS_PORT` | `6379` |
-| `REDIS_PASSWORD` | empty |
+| `COMMON_DS_CACHE_REDIS_HOST` | required |
+| `COMMON_DS_CACHE_REDIS_PORT` | required |
+| `COMMON_DS_CACHE_REDIS_PASSWORD` | empty |
+| `COMMON_DS_REDIS_TLS_ENABLED` | `false` |
+| `COMMON_DS_REDIS_CA_CERT` | CA certificate filesystem path; required with TLS |
+| `ACL_BASE_URL` | `http://localhost:8082` |
+| `ACL_TIMEOUT` | `10s` |
+| `IDEMPOTENCY_TTL_MINUTES` | `-1` (no expiry) |
+
+The Redis connection uses RESP3 and suppresses Lettuce library metadata. TLS follows
+the supplied connection configuration with peer verification disabled. Workflow
+idempotency continues to use string values and atomic Lua scripts.
 
 Start Redis separately with persistence and eviction settings appropriate for
 idempotency storage, for example:
@@ -70,6 +81,8 @@ idempotency storage, for example:
 redis-server --appendonly yes --appendfsync always --maxmemory-policy noeviction
 ```
 
+The ACL is a separate sibling project at `../anti-corruption-layer`.
+Start it in a separate terminal with `mvn -f ../anti-corruption-layer/pom.xml spring-boot:run`.
 The repository does not include a Docker Compose file or Maven wrapper.
 Check `java -version` and `mvn -version` if Maven uses a different JDK.
 
@@ -98,6 +111,72 @@ Gson serialization, saved-response replay, fingerprint compatibility, SQL catalo
 lookups and the integer definition-ID boundary. Full workflow transaction and
 concurrency tests against PostgreSQL are not part of the automated suite.
 
+## Formatting
+
+Spotless formats Java with Google Java Format in AOSP style (four-space indentation).
+Apply formatting in both services:
+
+```sh
+mvn spotless:apply
+mvn -f ../anti-corruption-layer/pom.xml spotless:apply
+```
+
+Use `spotless:check` to check formatting without changing files. Both services also
+run this check during `mvn verify`.
+
+
+## Finaag and Lyntra
+
+`finaag` is the default workflow; `lyntra` must be selected on CREATE. Workflow
+keys and event codes are case sensitive.
+
+| Workflow | Command sequence | States |
+| --- | --- | --- |
+| `finaag` | `VERIFY_OTP` → `UPDATE_PROFILE` → `UPLOAD_ACCOUNT_STATEMENT` → `UPLOAD_UDYAM_DOCUMENT` | 5 |
+| `lyntra` | `VERIFY_OTP` → `VERIFY_IDENTITY` → `SELECT_PLAN` | 4 |
+
+Finaag retains the original sequence. Lyntra follows:
+
+```text
+OTP_VERIFICATION --VERIFY_OTP--> IDENTITY_REVIEW
+IDENTITY_REVIEW --VERIFY_IDENTITY--> PLAN_SELECTION
+PLAN_SELECTION --SELECT_PLAN--> COMPLETED
+```
+
+The brain owns these sequences and sends the workflow key/version and action name
+to the ACL. Individual `@Component` implementations in `strategy/step` execute the
+action; there are no ACL workflow lists or grouped registration classes.
+Both workflows use `VerifyOtpStep`. The other actions have implementations scoped
+to their workflow key. All six implementations log local completion and succeed by
+default. Replace each `execute` body with its downstream API call later; no demo flag
+is required. These local defaults do not perform real business operations yet.
+
+Create a Lyntra instance with:
+
+```json
+{
+  "metadata": {
+    "operation": "CREATE",
+    "requestId": "req-lyntra",
+    "referenceId": "LYN-101",
+    "workflowKey": "lyntra",
+    "idempotencyKey": "LYN-101-create"
+  },
+  "payload": {}
+}
+```
+
+Submit the commands in the table in order, each with its own idempotency key.
+SUBMIT_EVENT uses the instance reference to find the workflow; omit `workflowKey`
+on that operation. Event names determine business actions, not state ordering.
+
+## Postman collection
+
+Import [the collection](docs/postman/workflows.postman_collection.json) and
+[local environment](docs/postman/local.postman_environment.json). They cover both
+workflow sequences, direct ACL execution, state reads, idempotent replays and
+validation errors. See [usage instructions](docs/postman/README.md).
+
 ## API contract
 
 All business operations use **POST `/api/workflows`** with
@@ -110,7 +189,7 @@ selected operation return `400 INVALID_REQUEST`.
 
 | Operation | Required metadata | Optional metadata | Forbidden metadata | Success |
 | --- | --- | --- | --- | --- |
-| `CREATE` | operation, requestId, referenceId, idempotencyKey | workflowKey; defaults to `onboarding` | event | 201 |
+| `CREATE` | operation, requestId, referenceId, idempotencyKey | workflowKey; defaults to `finaag` | event | 201 |
 | `GET_STATE` | operation, requestId, referenceId | None | event, workflowKey, idempotencyKey | 200 |
 | `SUBMIT_EVENT` | operation, requestId, referenceId, event, idempotencyKey | None | workflowKey | 200 |
 
@@ -142,7 +221,7 @@ a database error. Revisit these constraints when reference formats are defined.
     "operation": "CREATE",
     "requestId": "req-001",
     "referenceId": "APP-101",
-    "workflowKey": "onboarding",
+    "workflowKey": "finaag",
     "idempotencyKey": "APP-101-create"
   },
   "payload": {}
@@ -150,7 +229,7 @@ a database error. Revisit these constraints when reference formats are defined.
 ```
 
 Creates an instance using the highest `ACTIVE` version of the workflow. Seeded
-onboarding starts at `OTP_VERIFICATION`. A reference can have only one instance.
+finaag starts at `OTP_VERIFICATION`. A reference can have only one instance.
 
 ### Request a workflow step
 
@@ -177,14 +256,14 @@ Example response:
     "referenceId": "APP-101",
     "event": "VERIFY_OTP",
     "idempotencyKey": "APP-101-otp",
-    "workflowKey": "onboarding",
+    "workflowKey": "finaag",
     "status": "SUCCESS",
     "processedAt": "2026-11-04T06:00:00Z",
     "idempotencyReplayed": false
   },
   "payload": {
     "referenceId": "APP-101",
-    "workflowKey": "onboarding",
+    "workflowKey": "finaag",
     "definitionVersion": 1,
     "currentState": "PROFILE_DETAILS",
     "nextEvent": "UPDATE_PROFILE",
@@ -247,11 +326,30 @@ changing JSON libraries does not invalidate saved idempotency reservations.
 ## Idempotency and transactions
 
 `CREATE` and `SUBMIT_EVENT` require an idempotency key; `GET_STATE` forbids one.
-Keys are global within the application and have no automatic expiration.
+Keys are global within the application. Configure retention in `application.yml`:
+
+```yaml
+workflow:
+  idempotency:
+    ttl-minutes: ${IDEMPOTENCY_TTL_MINUTES:-1}
+```
+
+Set `IDEMPOTENCY_TTL_MINUTES=-1` for no expiry (default), or a positive whole
+number of minutes, for example `IDEMPOTENCY_TTL_MINUTES=30`. Zero, other negative
+values, fractions and values exceeding the supported Redis expiry range are rejected
+at startup. Restart the service after changing the setting.
+
+The TTL starts atomically when a claim becomes COMPLETED or RETRYABLE after a
+confirmed rollback. PROCESSING claims remain persistent, including uncertain
+post-commit outcomes. Reclaiming RETRYABLE removes its expiry until execution ends.
+Replays and conflicts do not extend retention. After expiry, the key and fingerprint
+are forgotten; reuse is treated as a new request and may execute work again.
+Configuration changes apply on future completion/retryable transitions, not
+retroactively to untouched existing keys.
 
 A SHA-256 fingerprint binds each key to the operation, reference, event and
 normalized workflow key. `requestId` is excluded. Omitting `workflowKey` on
-`CREATE` is equivalent to specifying `onboarding`.
+`CREATE` is equivalent to specifying `finaag`.
 
 An identical successful retry returns the original HTTP status, payload and
 `processedAt`, echoes the retry's `requestId`, and sets `idempotencyReplayed=true`.
@@ -263,7 +361,7 @@ Redis stores fingerprints, claim status and successful response JSON under
 `workflow:idempotency:<idempotencyKey>`. Lua scripts atomically claim, complete and
 release a confirmed rollback. No idempotency table is used in PostgreSQL.
 
-A claim has one owner and no automatic takeover or expiration. Concurrent attempts
+A PROCESSING claim has one owner, no expiry and no automatic takeover. Concurrent attempts
 with the same inputs return `409 IDEMPOTENCY_IN_PROGRESS`; different inputs return
 `409 IDEMPOTENCY_CONFLICT`. A confirmed JDBC rollback marks the claim retryable
 without removing its fingerprint. State updates and transition history commit in
@@ -300,7 +398,7 @@ All application tables and `flyway_schema_history` use the `workflow_brain` sche
 | Migration | Responsibility |
 | --- | --- |
 | [V1__create_workflow_schema.sql](src/main/resources/db/migration/V1__create_workflow_schema.sql) | Tables, constraints, identity columns and indexes |
-| [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Onboarding definition, states, transitions, actions and bindings |
+| [V2__insert_workflow_seed_data.sql](src/main/resources/db/migration/V2__insert_workflow_seed_data.sql) | Finaag and Lyntra definitions, states, transitions, actions and bindings |
 
 Every application table has an `id INTEGER` identity primary key, represented by
 Integer in Java. All foreign-key columns use `fk_id_<full_entity_name>`, for example
@@ -363,21 +461,16 @@ generated IDs and their `RETURNING` values for related rows.
 
 Definitions require one initial state, at least one terminal state, no outgoing
 transitions from terminal states and no unreachable states. Action names resolve through `WorkflowBehaviorRegistry`; unknown names fail closed.
-Step strategies are discovered from Spring components implementing
-`WorkflowStepStrategy`. A configured transition action name selects an implementation;
-`WorkflowStepCommand` executes it with request and definition context. The four
-onboarding strategies contain TODOs for future external calls. Bookkeeping actions
-log state entry, state exit, transitions and activity. All transition actions are awaited before
-progress is persisted.
-Failures must propagate so the database transaction rolls back. External side
-effects also require their own idempotency because a database rollback cannot
-undo a remote call. Step inputs and external API contracts are still to be defined;
-the current request payload remains `{}`.
+Business action names are forwarded unchanged to the ACL with the pinned workflow
+key/version, reference, event, request ID and idempotency key. The brain has no
+OTP, profile or document implementation. Bookkeeping actions remain local.
+New business action names need only a database binding and an ACL handler.
+Unknown implementations fail in the ACL without persisting progress.
 
-See [Configurable workflow steps](docs/WORKFLOW_STEPS.md) for the submission
-flowchart, implementation template, action bindings and workflow version changes.
-Reordering transitions or reusing a strategy requires configuration changes only.
-A new kind of business task requires a new strategy and its database binding.
+The ACL supports workflow-specific and shared implementations; see
+[Configurable workflow steps](docs/WORKFLOW_STEPS.md). The public brain request
+contract remains unchanged: step inputs are currently looked up by reference ID,
+and `payload` remains `{}` until downstream input contracts are defined.
 
 Machine restoration uses the instance's `fk_id_workflow_state` and pinned definition.
 PostgreSQL stores no machine-context JSON or context format version. The current
@@ -429,7 +522,7 @@ records the final request outcome.
 ## Swagger and source layout
 
 Swagger annotations, request examples and response examples are declared directly
-in `WorkflowController`. They cover all three operations, each onboarding event,
+in `WorkflowController`. They cover all three operations, each finaag event,
 completion, retries, illustrative custom workflows and handled errors. Swagger
 Try it out executes real requests against the configured database.
 
@@ -453,3 +546,8 @@ src/main/java/com/example/statemachine/
 
 Reusable utilities use enum implementations of `Predicate`, `Function`,
 `BiFunction`, `Supplier`, `Consumer` or `BiConsumer`, called directly at usage sites.
+
+Brain-to-ACL calls log their workflow, version, action, request ID and duration.
+The brain forwards `X-Correlation-Id` to the ACL; both services log that ID so a
+single execution can be traced across their logs. Non-success HTTP responses and
+invalid ACL acknowledgements are logged without response bodies.

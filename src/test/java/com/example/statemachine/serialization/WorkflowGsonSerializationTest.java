@@ -1,5 +1,7 @@
 package com.example.statemachine.serialization;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.config.WorkflowJsonConfiguration;
 import com.example.statemachine.dto.api.ApiError;
@@ -15,17 +17,25 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverters;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class WorkflowGsonSerializationTest {
     private final Gson gson = new GsonConfiguration().gson();
 
     @Test
     void omitsOptionalNullsButAlwaysWritesErrorPayload() {
-        WorkflowResponseMetadata metadata = new WorkflowResponseMetadata(
-                "GET_STATE", "req-1", "APP-101", null, null, "onboarding", "FAILED",
-                Instant.parse("2026-11-04T06:00:00Z"), null);
-        WorkflowResponse error = new WorkflowResponse(metadata, null, new ApiError("WORKFLOW_NOT_FOUND", "Not found."));
+        WorkflowResponseMetadata metadata =
+                new WorkflowResponseMetadata(
+                        "GET_STATE",
+                        "req-1",
+                        "APP-101",
+                        null,
+                        null,
+                        "finaag",
+                        "FAILED",
+                        Instant.parse("2026-11-04T06:00:00Z"),
+                        null);
+        WorkflowResponse error =
+                new WorkflowResponse(
+                        metadata, null, new ApiError("WORKFLOW_NOT_FOUND", "Not found."));
         JsonObject errorJson = gson.fromJson(gson.toJson(error), JsonObject.class);
         assertTrue(errorJson.has("payload"));
         assertTrue(errorJson.get("payload").isJsonNull());
@@ -36,11 +46,20 @@ class WorkflowGsonSerializationTest {
 
     @Test
     void omitsTerminalNextFieldsAndRoundTripsIsoTimestamps() {
-        WorkflowResponseMetadata metadata = new WorkflowResponseMetadata(
-                "GET_STATE", "req-1", "APP-101", null, null, "onboarding", "SUCCESS",
-                Instant.parse("2026-11-04T06:00:00.123456789Z"), null);
-        WorkflowDetails details = new WorkflowDetails("APP-101", "onboarding", 1, "COMPLETED",
-                null, null, true, List.of(), null);
+        WorkflowResponseMetadata metadata =
+                new WorkflowResponseMetadata(
+                        "GET_STATE",
+                        "req-1",
+                        "APP-101",
+                        null,
+                        null,
+                        "finaag",
+                        "SUCCESS",
+                        Instant.parse("2026-11-04T06:00:00.123456789Z"),
+                        null);
+        WorkflowDetails details =
+                new WorkflowDetails(
+                        "APP-101", "finaag", 1, "COMPLETED", null, null, true, List.of(), null);
         WorkflowResponse response = new WorkflowResponse(metadata, details, null);
         JsonObject json = gson.fromJson(gson.toJson(response), JsonObject.class);
         assertFalse(json.has("error"));
@@ -52,9 +71,12 @@ class WorkflowGsonSerializationTest {
 
     @Test
     void requestAdapterRoundTripsOptionalFieldsWithoutIntroducingNulls() {
-        WorkflowRequest request = gson.fromJson("""
+        WorkflowRequest request =
+                gson.fromJson(
+                        """
                 {"metadata":{"operation":"GET_STATE","requestId":"req-1","referenceId":"APP-101"},"payload":{}}
-                """, WorkflowRequest.class);
+                """,
+                        WorkflowRequest.class);
         WorkflowRequest restored = gson.fromJson(gson.toJson(request), WorkflowRequest.class);
         assertEquals("GET_STATE", restored.metadata().getOperation());
         assertEquals("APP-101", restored.metadata().getReferenceId());
@@ -63,12 +85,17 @@ class WorkflowGsonSerializationTest {
 
     @Test
     void prioritizesGsonForWorkflowEnvelopesWithoutInterceptingSwagger() {
-        var builder = HttpMessageConverters.forServer().registerDefaults();
+        HttpMessageConverters.ServerBuilder builder =
+                HttpMessageConverters.forServer().registerDefaults();
         new WorkflowJsonConfiguration(gson).configureMessageConverters(builder);
-        var converter = assertInstanceOf(WorkflowGsonHttpMessageConverter.class, builder.build().iterator().next());
+        WorkflowGsonHttpMessageConverter converter =
+                assertInstanceOf(
+                        WorkflowGsonHttpMessageConverter.class, builder.build().iterator().next());
         assertTrue(converter.canRead(WorkflowRequest.class, MediaType.APPLICATION_JSON));
         assertTrue(converter.canWrite(WorkflowResponse.class, MediaType.APPLICATION_JSON));
         assertFalse(converter.canWrite(String.class, MediaType.APPLICATION_JSON));
-        assertFalse(converter.canWrite(io.swagger.v3.oas.models.OpenAPI.class, MediaType.APPLICATION_JSON));
+        assertFalse(
+                converter.canWrite(
+                        io.swagger.v3.oas.models.OpenAPI.class, MediaType.APPLICATION_JSON));
     }
 }

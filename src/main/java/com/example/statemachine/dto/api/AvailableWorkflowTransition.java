@@ -1,6 +1,3 @@
 package com.example.statemachine.dto.api;
 
-public record AvailableWorkflowTransition(
-        String event,
-        String nextState
-) { }
+public record AvailableWorkflowTransition(String event, String nextState) {}

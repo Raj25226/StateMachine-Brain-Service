@@ -7,6 +7,8 @@ import com.example.statemachine.enums.IdempotencyClaimOutcome;
 import com.example.statemachine.exception.WorkflowException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -18,12 +20,28 @@ import org.springframework.stereotype.Repository;
 @Slf4j
 public class RedisWorkflowIdempotencyRepository {
     private final StringRedisTemplate redisTemplate;
+    private final String ttlSeconds;
     private final DefaultRedisScript<List> claimScript;
     private final DefaultRedisScript<Long> completeScript;
     private final DefaultRedisScript<Long> retryScript;
 
     public RedisWorkflowIdempotencyRepository(StringRedisTemplate redisTemplate) {
+        this(redisTemplate, RedisConstants.INFINITE_TTL_MINUTES);
+    }
+
+    @Autowired
+    public RedisWorkflowIdempotencyRepository(
+            StringRedisTemplate redisTemplate,
+            @Value(RedisConstants.TTL_MINUTES_PROPERTY) long ttlMinutes) {
+        if (ttlMinutes != RedisConstants.INFINITE_TTL_MINUTES
+                && (ttlMinutes <= 0 || ttlMinutes > RedisConstants.MAX_TTL_MINUTES)) {
+            throw new IllegalArgumentException(RedisConstants.INVALID_TTL);
+        }
         this.redisTemplate = redisTemplate;
+        this.ttlSeconds =
+                Long.toString(
+                        ttlMinutes == RedisConstants.INFINITE_TTL_MINUTES ? -1 : ttlMinutes * 60);
+        log.info("Workflow idempotency TTL configured | minutes={}", ttlMinutes);
         claimScript = new DefaultRedisScript<>();
         claimScript.setLocation(new ClassPathResource(RedisConstants.CLAIM_SCRIPT));
         claimScript.setResultType(List.class);
@@ -35,26 +53,43 @@ public class RedisWorkflowIdempotencyRepository {
         retryScript.setResultType(Long.class);
     }
 
-    public WorkflowIdempotencyClaim claim(String idempotencyKey, String fingerprint, String ownerToken) {
+    public WorkflowIdempotencyClaim claim(
+            String idempotencyKey, String fingerprint, String ownerToken) {
         try {
-            List<?> result = redisTemplate.execute(claimScript, key(idempotencyKey), fingerprint, ownerToken);
+            List<?> result =
+                    redisTemplate.execute(
+                            claimScript, key(idempotencyKey), fingerprint, ownerToken);
             if (result == null || result.isEmpty()) {
                 throw new IllegalStateException("Redis returned an empty idempotency claim.");
             }
-            IdempotencyClaimOutcome outcome = IdempotencyClaimOutcome.valueOf((String) result.getFirst());
+            IdempotencyClaimOutcome outcome =
+                    IdempotencyClaimOutcome.valueOf((String) result.getFirst());
             return outcome == IdempotencyClaimOutcome.REPLAY
-                    ? new WorkflowIdempotencyClaim(outcome, (String) result.get(1), Integer.valueOf((String) result.get(2)))
+                    ? new WorkflowIdempotencyClaim(
+                            outcome,
+                            (String) result.get(1),
+                            Integer.valueOf((String) result.get(2)))
                     : new WorkflowIdempotencyClaim(outcome, null, null);
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }
     }
 
-    public void complete(String idempotencyKey, String ownerToken, String responseJson, int httpStatus) {
+    public void complete(
+            String idempotencyKey, String ownerToken, String responseJson, int httpStatus) {
         try {
-            Long completed = redisTemplate.execute(completeScript, key(idempotencyKey), ownerToken, responseJson, Integer.toString(httpStatus));
+            Long completed =
+                    redisTemplate.execute(
+                            completeScript,
+                            key(idempotencyKey),
+                            ownerToken,
+                            responseJson,
+                            Integer.toString(httpStatus),
+                            ttlSeconds);
             if (!Long.valueOf(1).equals(completed)) {
-                throw new WorkflowException(HttpStatus.SERVICE_UNAVAILABLE, ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
+                throw new WorkflowException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
                         "Idempotency ownership was lost after processing. Do not use a new retry key.");
             }
         } catch (DataAccessException exception) {
@@ -64,10 +99,10 @@ public class RedisWorkflowIdempotencyRepository {
 
     public void markRetryable(String idempotencyKey, String ownerToken) {
         try {
-            redisTemplate.execute(retryScript, key(idempotencyKey), ownerToken);
+            redisTemplate.execute(retryScript, key(idempotencyKey), ownerToken, ttlSeconds);
         } catch (DataAccessException exception) {
             // Keep PROCESSING if recovery storage fails; automatic re-execution would be unsafe.
-            log.error("workflow_idempotency_rollback_recovery_failed", exception);
+            log.error("Workflow idempotency rollback recovery failed", exception);
         }
     }
 
@@ -76,8 +111,10 @@ public class RedisWorkflowIdempotencyRepository {
     }
 
     private WorkflowException unavailable(DataAccessException exception) {
-        log.error("workflow_idempotency_store_unavailable", exception);
-        return new WorkflowException(HttpStatus.SERVICE_UNAVAILABLE, ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
+        log.error("Workflow idempotency store unavailable", exception);
+        return new WorkflowException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                ApiErrorConstants.IDEMPOTENCY_UNAVAILABLE,
                 "Idempotency storage is unavailable. Retry with the same idempotency key.");
     }
 }
