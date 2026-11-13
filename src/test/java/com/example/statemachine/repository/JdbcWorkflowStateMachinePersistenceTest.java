@@ -1,21 +1,23 @@
 package com.example.statemachine.repository;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.statemachine.dto.persistence.WorkflowInstance;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.statemachine.StateMachineContext;
 import org.springframework.statemachine.support.DefaultExtendedState;
 import org.springframework.statemachine.support.DefaultStateMachineContext;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class JdbcWorkflowStateMachinePersistenceTest {
     private final CapturingInstanceRepository repository = new CapturingInstanceRepository();
-    private final JdbcWorkflowStateMachinePersistence persistence = new JdbcWorkflowStateMachinePersistence(repository);
+    private final JdbcWorkflowStateMachinePersistence persistence =
+            new JdbcWorkflowStateMachinePersistence(repository);
 
     @Test
     void restoresCurrentStateFromTheInstanceWithoutSerializedData() {
-        var context = persistence.read("APP-101");
+        StateMachineContext<String, String> context = persistence.read("APP-101");
         assertEquals("PROFILE_DETAILS", context.getState());
         assertTrue(context.getExtendedState().getVariables().isEmpty());
         assertNull(context.getEvent());
@@ -23,8 +25,10 @@ class JdbcWorkflowStateMachinePersistenceTest {
 
     @Test
     void updatesOnlyTheRelationalStateAndCanRestoreIt() {
-        persistence.write(new DefaultStateMachineContext<>("COMPLETED", null, null,
-                new DefaultExtendedState()), "APP-101");
+        persistence.write(
+                new DefaultStateMachineContext<>(
+                        "COMPLETED", null, null, new DefaultExtendedState()),
+                "APP-101");
         assertEquals("APP-101", repository.reference);
         assertEquals("COMPLETED", repository.state);
         assertEquals("COMPLETED", persistence.read("APP-101").getState());
@@ -32,17 +36,26 @@ class JdbcWorkflowStateMachinePersistenceTest {
 
     @Test
     void rejectsExtendedVariablesRatherThanSilentlyDiscardingThem() {
-        var context = new DefaultStateMachineContext<String, String>("COMPLETED", null, null,
-                new DefaultExtendedState(new HashMap<>(Map.of("businessValue", "must-be-durable"))));
+        StateMachineContext<String, String> context =
+                new DefaultStateMachineContext<String, String>(
+                        "COMPLETED",
+                        null,
+                        null,
+                        new DefaultExtendedState(
+                                new HashMap<>(Map.of("businessValue", "must-be-durable"))));
         assertThrows(IllegalStateException.class, () -> persistence.write(context, "APP-101"));
         assertNull(repository.reference);
     }
 
     @Test
     void rejectsChildContextsInsteadOfPersistingAnIncompleteMachine() {
-        var context = new DefaultStateMachineContext<String, String>("PROFILE_DETAILS", null, null,
-                new DefaultExtendedState());
-        context.getChilds().add(new DefaultStateMachineContext<>("CHILD", null, null, new DefaultExtendedState()));
+        StateMachineContext<String, String> context =
+                new DefaultStateMachineContext<String, String>(
+                        "PROFILE_DETAILS", null, null, new DefaultExtendedState());
+        context.getChilds()
+                .add(
+                        new DefaultStateMachineContext<>(
+                                "CHILD", null, null, new DefaultExtendedState()));
         assertThrows(IllegalStateException.class, () -> persistence.write(context, "APP-101"));
         assertNull(repository.reference);
     }
@@ -51,7 +64,9 @@ class JdbcWorkflowStateMachinePersistenceTest {
         private String reference;
         private String state = "PROFILE_DETAILS";
 
-        CapturingInstanceRepository() { super(null); }
+        CapturingInstanceRepository() {
+            super(null);
+        }
 
         @Override
         public WorkflowInstance findByReferenceId(String reference) {

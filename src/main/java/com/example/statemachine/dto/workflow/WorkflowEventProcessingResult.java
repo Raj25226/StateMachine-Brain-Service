@@ -6,5 +6,4 @@ public record WorkflowEventProcessingResult(
         String previousState,
         String event,
         String currentState,
-        WorkflowEventProcessingOutcome outcome
-) { }
+        WorkflowEventProcessingOutcome outcome) {}

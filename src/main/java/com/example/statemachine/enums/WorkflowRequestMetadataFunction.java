@@ -6,7 +6,8 @@ import com.example.statemachine.dto.api.WorkflowRequestMetadata;
 import java.util.function.Function;
 
 /** Copies caller metadata without validation, normalization or dropping invalid values. */
-public enum WorkflowRequestMetadataFunction implements Function<WorkflowRequest, WorkflowCommandMetadata> {
+public enum WorkflowRequestMetadataFunction
+        implements Function<WorkflowRequest, WorkflowCommandMetadata> {
     EXTRACT;
 
     @Override
@@ -16,7 +17,11 @@ public enum WorkflowRequestMetadataFunction implements Function<WorkflowRequest,
         }
         WorkflowRequestMetadata requestMetadata = request.metadata();
         return new WorkflowCommandMetadata(
-                requestMetadata.getOperation(), requestMetadata.getRequestId(), requestMetadata.getReferenceId(),
-                requestMetadata.getEvent(), requestMetadata.getIdempotencyKey(), requestMetadata.getWorkflowKey());
+                requestMetadata.getOperation(),
+                requestMetadata.getRequestId(),
+                requestMetadata.getReferenceId(),
+                requestMetadata.getEvent(),
+                requestMetadata.getIdempotencyKey(),
+                requestMetadata.getWorkflowKey());
     }
 }

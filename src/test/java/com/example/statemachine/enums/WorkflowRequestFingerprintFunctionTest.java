@@ -1,5 +1,8 @@
 package com.example.statemachine.enums;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+
 import com.example.statemachine.config.GsonConfiguration;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.workflow.WorkflowCommand;
@@ -10,41 +13,58 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-
 class WorkflowRequestFingerprintFunctionTest {
     private final Gson gson = new GsonConfiguration().gson();
+
     @Test
-    void preservesPreviouslyStoredFingerprintFormat() {
-        assertEquals("4273767d05a4a616ac97713757dce4f74bbde76fa97e3774e709aa2adecfb5c4",
-                WorkflowRequestFingerprintFunction.SHA_256.apply(command("req-1", "key-1", "APP-101"), gson));
+    void usesStableFinaagFingerprintFormat() {
+        assertEquals(
+                "2e8042563f4ad596b2dba4a3a16633483c347d15c0c85605c17f3ff4d1fc14f7",
+                WorkflowRequestFingerprintFunction.SHA_256.apply(
+                        command("req-1", "key-1", "APP-101"), gson));
     }
 
     @Test
     void excludesCorrelationAndRetryKeysButIncludesBusinessInputs() {
-        String original = WorkflowRequestFingerprintFunction.SHA_256.apply(command("req-1", "key-1", "APP-101"), gson);
-        assertEquals(original, WorkflowRequestFingerprintFunction.SHA_256.apply(command("req-2", "key-2", "APP-101"), gson));
-        assertNotEquals(original, WorkflowRequestFingerprintFunction.SHA_256.apply(command("req-1", "key-1", "APP-102"), gson));
+        String original =
+                WorkflowRequestFingerprintFunction.SHA_256.apply(
+                        command("req-1", "key-1", "APP-101"), gson);
+        assertEquals(
+                original,
+                WorkflowRequestFingerprintFunction.SHA_256.apply(
+                        command("req-2", "key-2", "APP-101"), gson));
+        assertNotEquals(
+                original,
+                WorkflowRequestFingerprintFunction.SHA_256.apply(
+                        command("req-1", "key-1", "APP-102"), gson));
     }
 
-    static Stream<Arguments> previouslyStoredEscapedFingerprints() {
+    static Stream<Arguments> escapedFinaagFingerprints() {
         return Stream.of(
-                Arguments.of("APP/<tag>&='value'", "a9c37e49e5bc3b3438ce0a41856a3204aecbc1b1068168e55c9b8c718ef1b68b"),
-                Arguments.of("APP-" + (char) 11 + "-" + (char) 0x2028 + "-" + (char) 0x2029,
-                        "c925f7200616f3a352c7389431a982324e4fb64e14308e7f28f42500c1e9e5b3"),
-                Arguments.of("APP-\\u2028-\\u000b", "2f9b60c36c6727a6a19062a74362ec8c35f139fef1d5a454dd8c7213da3aa9ef"));
+                Arguments.of(
+                        "APP/<tag>&='value'",
+                        "4dc6839610faa7a4fde92048a947b6bdab39ea367ab83bf2b8236571c3f70616"),
+                Arguments.of(
+                        "APP-" + (char) 11 + "-" + (char) 0x2028 + "-" + (char) 0x2029,
+                        "2283067d694e5e91b5ab43a20f2e95d4d22e1cd3c350257c72c3c4784eac7049"),
+                Arguments.of(
+                        "APP-\\u2028-\\u000b",
+                        "e09c64c7df1524d35900a73f494b5708b14a11abb4652f45d71c41407dbdf8a6"));
     }
 
     @ParameterizedTest
-    @MethodSource("previouslyStoredEscapedFingerprints")
-    void preservesEscapingUsedByExistingFingerprintReservations(String referenceId, String expectedFingerprint) {
-        assertEquals(expectedFingerprint,
-                WorkflowRequestFingerprintFunction.SHA_256.apply(command("req-1", "key-1", referenceId), gson));
+    @MethodSource("escapedFinaagFingerprints")
+    void usesStableEscapingInFinaagFingerprints(String referenceId, String expectedFingerprint) {
+        assertEquals(
+                expectedFingerprint,
+                WorkflowRequestFingerprintFunction.SHA_256.apply(
+                        command("req-1", "key-1", referenceId), gson));
     }
 
     private WorkflowCommand command(String requestId, String idempotencyKey, String referenceId) {
-        return new WorkflowCommand(new WorkflowCommandMetadata("CREATE", requestId, referenceId, null, idempotencyKey, "onboarding"),
+        return new WorkflowCommand(
+                new WorkflowCommandMetadata(
+                        "CREATE", requestId, referenceId, null, idempotencyKey, "finaag"),
                 WorkflowOperation.CREATE);
     }
 }

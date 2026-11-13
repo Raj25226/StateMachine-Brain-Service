@@ -7,5 +7,4 @@ public record WorkflowCommandMetadata(
         String referenceId,
         String event,
         String idempotencyKey,
-        String workflowKey
-) { }
+        String workflowKey) {}

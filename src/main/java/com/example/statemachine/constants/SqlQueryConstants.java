@@ -2,7 +2,7 @@ package com.example.statemachine.constants;
 
 /** Classpath resource, parent groups and query-key suffixes for the runtime JDBC queries. */
 public final class SqlQueryConstants {
-    private SqlQueryConstants() { }
+    private SqlQueryConstants() {}
 
     public static final String RESOURCE_NAME = "sql-queries.yml";
 

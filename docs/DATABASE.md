@@ -4,7 +4,7 @@ All 8 application tables and `flyway_schema_history` use the `workflow_brain`
 schema. Flyway creates the schema before initializing its history.
 
 - `V1__create_workflow_schema.sql`: tables, constraints, identity columns and indexes.
-- `V2__insert_workflow_seed_data.sql`: onboarding definitions and behavior bindings.
+- `V2__insert_workflow_seed_data.sql`: Finaag and Lyntra definitions and behavior bindings.
 
 The current files are a fresh testing baseline. Reset application tables and Flyway
 history together before using them. Recreating `workflow_brain` also resets its
@@ -54,18 +54,21 @@ Redis handles idempotency reservations and saved responses. PostgreSQL contains
 no replay table. History stores the caller's request ID and idempotency key as
 audit metadata, without a foreign key to Redis.
 
-## Seeded onboarding
+## Seeded workflows
 
-V2 creates one active definition (`workflow_key=onboarding`, `version=1`), five
-states, four external transitions, eight actions, fifteen state-action
-bindings and eight transition-action bindings. Each transition runs its TODO step
-strategy at execution order 0, followed by recordTransition at order 1. See
-[Configurable workflow steps](WORKFLOW_STEPS.md) for Java strategy registration
-and database bindings.
+V2 creates two ACTIVE version-1 definitions: `finaag` (five states and four
+transitions) and `lyntra` (four states and three transitions). Together they use
+ten actions (four local bookkeeping actions and six ACL business actions),
+27 state-action bindings and 14 transition-action bindings. Each transition runs
+its ACL action at order 0, then `recordTransition` at order 1.
 
-Seed statements resolve generated IDs through workflow keys, state codes, action
-names. They do not depend on specific identity sequence values.
-Runtime queries join the action table to resolve the registered Java names.
+Both workflows use `verifyOtp`; the remaining business actions are specific to
+their workflow. Identical state codes belong to separate definition IDs.
+Seed relationships resolve generated IDs by workflow keys, state codes and action
+names. See [workflow steps](WORKFLOW_STEPS.md) for the sequences and ACL handlers.
+
+This POC updates V2 directly. Reset the POC schema and Flyway history before
+starting with an existing database that has already applied the older V2.
 
 ## Inspect workflow rules
 

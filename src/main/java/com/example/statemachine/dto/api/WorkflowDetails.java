@@ -12,5 +12,4 @@ public record WorkflowDetails(
         String nextState,
         boolean completed,
         List<AvailableWorkflowTransition> availableTransitions,
-        WorkflowEventOutcome eventOutcome
-) { }
+        WorkflowEventOutcome eventOutcome) {}

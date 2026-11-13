@@ -1,0 +1,629 @@
+{
+  "info": {
+    "name": "Workflow Brain \u2014 Finaag & Lyntra",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Set finaagReference and lyntraReference manually in collection variables. Run each folder in order. Change references manually to start new workflows."
+  },
+  "variable": [
+    {
+      "key": "brainBaseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "finaagReference",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lyntraReference",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.variables.set(\"requestId\", pm.variables.replaceIn(\"{{$guid}}\"));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Finaag workflow",
+      "item": [
+        {
+          "name": "01 Create finaag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"CREATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"workflowKey\": \"finaag\",\n    \"idempotencyKey\": \"{{finaagReference}}-create\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Read initial state",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"GET_STATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 VERIFY_OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"event\": \"VERIFY_OTP\",\n    \"idempotencyKey\": \"{{finaagReference}}-VERIFY_OTP\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 UPDATE_PROFILE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"event\": \"UPDATE_PROFILE\",\n    \"idempotencyKey\": \"{{finaagReference}}-UPDATE_PROFILE\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 UPLOAD_ACCOUNT_STATEMENT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"event\": \"UPLOAD_ACCOUNT_STATEMENT\",\n    \"idempotencyKey\": \"{{finaagReference}}-UPLOAD_ACCOUNT_STATEMENT\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 UPLOAD_UDYAM_DOCUMENT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"event\": \"UPLOAD_UDYAM_DOCUMENT\",\n    \"idempotencyKey\": \"{{finaagReference}}-UPLOAD_UDYAM_DOCUMENT\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read final state",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"GET_STATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"event\": \"VERIFY_OTP\",\n    \"idempotencyKey\": \"{{finaagReference}}-VERIFY_OTP\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));",
+                  "pm.test(\"Idempotency replay\", () => pm.expect(pm.response.json().metadata.idempotencyReplayed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"CREATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{finaagReference}}\",\n    \"workflowKey\": \"finaag\",\n    \"idempotencyKey\": \"{{finaagReference}}-create\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));",
+                  "pm.test(\"Idempotency replay\", () => pm.expect(pm.response.json().metadata.idempotencyReplayed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lyntra workflow",
+      "item": [
+        {
+          "name": "01 Create lyntra",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"CREATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"workflowKey\": \"lyntra\",\n    \"idempotencyKey\": \"{{lyntraReference}}-create\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Read initial state",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"GET_STATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 VERIFY_OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"event\": \"VERIFY_OTP\",\n    \"idempotencyKey\": \"{{lyntraReference}}-VERIFY_OTP\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 VERIFY_IDENTITY",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"event\": \"VERIFY_IDENTITY\",\n    \"idempotencyKey\": \"{{lyntraReference}}-VERIFY_IDENTITY\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 SELECT_PLAN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"event\": \"SELECT_PLAN\",\n    \"idempotencyKey\": \"{{lyntraReference}}-SELECT_PLAN\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read final state",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"GET_STATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"SUBMIT_EVENT\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"event\": \"VERIFY_OTP\",\n    \"idempotencyKey\": \"{{lyntraReference}}-VERIFY_OTP\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));",
+                  "pm.test(\"Idempotency replay\", () => pm.expect(pm.response.json().metadata.idempotencyReplayed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{brainBaseUrl}}/api/workflows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"operation\": \"CREATE\",\n    \"requestId\": \"{{requestId}}\",\n    \"referenceId\": \"{{lyntraReference}}\",\n    \"workflowKey\": \"lyntra\",\n    \"idempotencyKey\": \"{{lyntraReference}}-create\"\n  },\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Success\", () => pm.expect(pm.response.json().metadata.status).to.eql(\"SUCCESS\"));",
+                  "pm.test(\"Idempotency replay\", () => pm.expect(pm.response.json().metadata.idempotencyReplayed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

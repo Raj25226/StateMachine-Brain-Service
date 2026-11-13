@@ -1,167 +1,112 @@
 # Configurable workflow steps
 
-CREATE selects a workflow definition and starts its initial state. GET_STATE reads
-saved progress. SUBMIT_EVENT uses the instance's definition to select a transition
-and its configured step implementation. The gateway has no step-specific routing.
-
-## What selects the next state?
-
-PostgreSQL defines the workflow graph, not the Java strategy:
-
-- `workflow_definition` identifies a workflow key and version.
-- `workflow_state` defines its states and initial/terminal flags.
-- `workflow_transition` defines source state, requested event and target state.
-- `workflow_action.action_name` identifies a registered Java implementation.
-- `workflow_transition_action` binds implementations to transitions in execution order.
-
-State names, event names and action names have separate purposes. For example:
-
-| Source state | Requested event | Step action name | Java strategy | Target state |
-| --- | --- | --- | --- | --- |
-| OTP_VERIFICATION | VERIFY_OTP | verifyOtp | VerifyOtpStepStrategy | PROFILE_DETAILS |
-| PROFILE_DETAILS | UPDATE_PROFILE | updateProfile | UpdateProfileStepStrategy | ACCOUNT_STATEMENT_UPLOAD |
-| ACCOUNT_STATEMENT_UPLOAD | UPLOAD_ACCOUNT_STATEMENT | uploadAccountStatement | UploadAccountStatementStepStrategy | UDYAM_DOCUMENT_UPLOAD |
-| UDYAM_DOCUMENT_UPLOAD | UPLOAD_UDYAM_DOCUMENT | uploadUdyamDocument | UploadUdyamDocumentStepStrategy | COMPLETED |
-
-The same strategy can be reused by different workflows, events, states and versions.
-Two workflows can bind the same event to different strategies. Resolution uses the
-instance's pinned definition and transition bindings, not a global event switch.
-
-## How submission works
-
 ```mermaid
-flowchart TD
-    Request["SUBMIT_EVENT"] --> Validate["Validate request and claim Redis idempotency"]
-    Validate --> Load["Lock instance and load its definition version"]
-    Load --> Restore["Restore machine state"]
-    Restore --> Allowed{"Transition allowed from current state?"}
-    Allowed -->|No| Reject["Reject without executing a step"]
-    Allowed -->|Yes| Binding["Read ordered action bindings for that transition"]
-    Binding --> Registry["Resolve Spring-discovered WorkflowStepStrategy by action name"]
-    Registry --> Command["Create WorkflowStepCommand with strategy and request context"]
-    Command --> Execute["Execute strategy; await completion"]
-    Execute --> Outcome{"Succeeded?"}
-    Outcome -->|No| Rollback["Propagate failure; roll back database transaction"]
-    Outcome -->|Yes| Bookkeeping["Run remaining ordered actions"]
-    Bookkeeping --> Persist["Save history and current state FK; commit database"]
-    Persist --> Redis["Save response in Redis and return success"]
+sequenceDiagram
+    participant Caller
+    participant Brain
+    participant ACL as anti-corruption-layer
+    participant Downstream
+    Caller->>Brain: SUBMIT_EVENT
+    Brain->>Brain: Validate event and lock instance
+    Brain->>ACL: Execute action with pinned workflow/version
+    ACL->>ACL: Resolve workflow-specific or shared handler
+    ACL->>Downstream: Business operation with idempotency key
+    Downstream-->>ACL: Success
+    ACL-->>Brain: 200 {status: SUCCEEDED}
+    Brain->>Brain: Persist state and history
+    Brain-->>Caller: Updated workflow
 ```
 
-Unknown action names fail when constructing the model. Duplicate strategy names,
-blank names and names reserved for bookkeeping fail during bean initialization.
-Business steps require the submission context; starting a machine does not execute
-its outgoing transition steps.
+The database controls states, transitions and their action bindings. Different
+workflow definitions can use different numbers of states, reuse state names and
+reuse action names without sharing their implementations. Instances stay pinned
+to a definition version.
 
-## Strategy and command responsibilities
+Local bookkeeping names (`recordStateEntry`, `recordStateExit`, `observeState`,
+`recordTransition`) are reserved. Every other action name delegates to the ACL.
+Business actions should be bound to transitions, not entry/exit/activity hooks,
+so restoring or starting a machine never triggers a business operation.
 
-[WorkflowStepStrategy](../src/main/java/com/example/statemachine/strategy/WorkflowStepStrategy.java)
-is the extension point: provide a stable action name and implement `execute`.
-Spring discovers implementations through `@Component`; no registry edit is needed.
+Implement `WorkflowStepHandler` in the ACL with `@Component`; Spring discovers it
+automatically. Only implementation routing metadata belongs here; state order
+stays in the brain database:
 
-[WorkflowStepCommand](../src/main/java/com/example/statemachine/command/WorkflowStepCommand.java)
-encapsulates the selected strategy and the context for one invocation. Its
-`execute()` calls the strategy. It is created for that submission, not shared
-between requests or stored in the database.
+```java
+@Component
+class LoanOtpHandler implements WorkflowStepHandler {
+    public String workflowKey() { return "loan"; }
+    public int definitionVersion() { return 2; }
+    public String actionName() { return "verifyOtp"; }
+    public void execute(StepInvocation invocation) {
+        // Call the OTP provider, using invocation.referenceId() to locate inputs.
+        // Deduplicate remote mutations with invocation.idempotencyKey().
+        // Throw if verification fails or its outcome is uncertain.
+    }
+}
+```
 
-[WorkflowStepContext](../src/main/java/com/example/statemachine/dto/workflow/WorkflowStepContext.java)
-contains request metadata, definition ID, workflow key and definition version.
-Request metadata includes the reference ID, request ID, event and idempotency key.
-The definition supplies workflow information even though SUBMIT_EVENT does not
-accept a workflowKey from the caller. Strategies should not hardcode a next state.
+Use workflow key `*` for a shared implementation and version `0` (the default)
+for all versions. Resolution order is workflow/exact version, workflow/all
+versions, shared/exact version, then shared/all versions. Duplicate registration
+keys fail startup. An unknown action fails execution; no fallback reports success.
+A handler never chooses the next state or changes the brain database.
 
-[WorkflowBehaviorRegistry](../src/main/java/com/example/statemachine/statemachine/WorkflowBehaviorRegistry.java)
-adapts a registered strategy to a StateMachine action. The model factory awaits
-transition actions in configured order. Errors mark the machine failed and reach
-the execution service before history/state persistence.
+Publish graph changes in a new Flyway migration as a new definition version.
+Deploy compatible ACL handlers before activating that version. No brain Java
+change is needed for new business action names. Existing instances retain their
+original graph and must retain compatible ACL implementations.
 
-## Implement the existing TODOs
+All actions complete before the brain commits state/history. HTTP errors,
+timeouts and invalid acknowledgements abort the workflow transaction. Remote side
+effects cannot be rolled back by JDBC. The brain forwards the original idempotency
+key and performs no application-level HTTP retries. Each real ACL integration must
+durably deduplicate its downstream operation (including after a timeout or a brain
+rollback). When a transition invokes multiple business actions, scope downstream
+deduplication by workflow/version/reference/action and the caller idempotency key.
+The ACL scaffolding has no business effects or durable result store yet; do not
+add real side effects without implementing this guarantee.
 
-Business integrations are intentionally placeholders:
+## Finaag and Lyntra
 
-- [VerifyOtpStepStrategy](../src/main/java/com/example/statemachine/strategy/step/VerifyOtpStepStrategy.java)
-- [UpdateProfileStepStrategy](../src/main/java/com/example/statemachine/strategy/step/UpdateProfileStepStrategy.java)
-- [UploadAccountStatementStepStrategy](../src/main/java/com/example/statemachine/strategy/step/UploadAccountStatementStepStrategy.java)
-- [UploadUdyamDocumentStepStrategy](../src/main/java/com/example/statemachine/strategy/step/UploadUdyamDocumentStepStrategy.java)
+`finaag` is the default workflow; `lyntra` must be selected on CREATE. Workflow
+keys and event codes are case sensitive.
 
-Each currently logs `workflow_step_placeholder` and returns successfully so the
-testing workflow can advance. It does not perform or confirm a real business task.
-Fill in the TODOs when the external APIs and required inputs have been decided.
-Use Lombok `@AllArgsConstructor` when adding injected client dependencies.
+| Workflow | Command sequence | States |
+| --- | --- | --- |
+| `finaag` | `VERIFY_OTP` → `UPDATE_PROFILE` → `UPLOAD_ACCOUNT_STATEMENT` → `UPLOAD_UDYAM_DOCUMENT` | 5 |
+| `lyntra` | `VERIFY_OTP` → `VERIFY_IDENTITY` → `SELECT_PLAN` | 4 |
 
-Required implementation behavior:
+Finaag retains the original sequence. Lyntra follows:
 
-1. Validate the step's required inputs once their contract is defined.
-2. Call the external service and wait for its result.
-3. Treat a business rejection or timeout as a failure; propagate an exception.
-4. Return normally only when the required task succeeded.
-5. Pass a stable idempotency token to external services where supported.
+```text
+OTP_VERIFICATION --VERIFY_OTP--> IDENTITY_REVIEW
+IDENTITY_REVIEW --VERIFY_IDENTITY--> PLAN_SELECTION
+PLAN_SELECTION --SELECT_PLAN--> COMPLETED
+```
 
-Strategies are singleton Spring beans: keep per-request data in the supplied
-context or local variables. Do not store it in mutable strategy fields. The current
-HTTP payload must still be `{}`; adding OTP/profile/document inputs later requires
-updating the API DTOs, Gson binding, validation, Swagger and fingerprint policy.
+The brain owns these sequences and sends the workflow key/version and action name
+to the ACL. Individual `@Component` implementations in `strategy/step` execute the
+action; there are no ACL workflow lists or grouped registration classes.
+Both workflows use `VerifyOtpStep`. The other actions have implementations scoped
+to their workflow key. All six implementations log local completion and succeed by
+default. Replace each `execute` body with its downstream API call later; no demo flag
+is required. These local defaults do not perform real business operations yet.
 
-JDBC rollback cannot undo a completed external call. A retry after rollback can
-invoke the strategy again; external effects need their own idempotency or an
-appropriate recovery/outbox design. The current implementation does not introduce
-external clients, credentials, retries or response contracts.
+Create a Lyntra instance with:
 
-## Add a new state and implementation
+```json
+{
+  "metadata": {
+    "operation": "CREATE",
+    "requestId": "req-lyntra",
+    "referenceId": "LYN-101",
+    "workflowKey": "lyntra",
+    "idempotencyKey": "LYN-101-create"
+  },
+  "payload": {}
+}
+```
 
-1. Add a stable action-name constant in `WorkflowBehaviorConstants`.
-2. Add a Spring component implementing `WorkflowStepStrategy`:
-
-   ```java
-   @Component
-   public class AddressCheckStepStrategy implements WorkflowStepStrategy {
-       @Override
-       public String actionName() {
-           return WorkflowBehaviorConstants.CHECK_ADDRESS;
-       }
-
-       @Override
-       public void execute(WorkflowStepContext context) throws Exception {
-           // TODO: Implement the address check. Propagate failures.
-       }
-   }
-   ```
-
-3. In a new definition version, insert the new state and its transitions.
-4. Insert `workflow_action` with the exact name returned by `actionName()`.
-5. Bind that action to the appropriate transition using `workflow_transition_action`.
-   Use execution order 0 for the business step, then later orders for bookkeeping.
-6. Activate the new definition version and test success, failure and retry paths.
-
-No changes are required to the controller, gateway, command dispatcher, event
-processor or model factory. If a new state reuses an existing implementation, only
-its database configuration needs to change. Multiple actions per transition are
-supported and run sequentially.
-
-## Reorder steps or change a workflow
-
-Change source/target relationships in a new definition version. Reuse existing
-action bindings, or bind different strategies. Keep one initial state, at least
-one terminal state, no outgoing terminal transitions and all states reachable.
-State row order and numeric IDs do not define execution order; transitions do.
-
-CREATE uses the highest ACTIVE version for its workflow key. Existing instances
-remain on their original definition version. This protects an in-flight application
-from silently being moved to a different process. Moving existing instances to a
-new graph requires an explicit state/history migration policy; no automatic
-upgrade endpoint is implemented.
-
-The current testing baseline V2 includes the four step-action bindings. Reset and
-reseed the testing schema and Flyway history to apply the changed baseline.
-For a retained database, use a new migration rather than altering applied history.
-
-## Relational persistence
-
-Machines restore from `workflow_instances.fk_id_workflow_state` and the instance's
-pinned definition. There is no machine-context JSON column or format version.
-State entry/exit and transition actions only log; current progress and historical
-source/target states/events are already available in relational tables.
-
-Do not put durable business data in extended machine variables. Persistence rejects
-nonempty extended variables to prevent silently losing them on restart. Add explicit
-columns and repository methods when durable step results are defined. Per-request
-metadata travels in message headers and is not serialized into PostgreSQL.
+Submit the commands in the table in order, each with its own idempotency key.
+SUBMIT_EVENT uses the instance reference to find the workflow; omit `workflowKey`
+on that operation. Event names determine business actions, not state ordering.

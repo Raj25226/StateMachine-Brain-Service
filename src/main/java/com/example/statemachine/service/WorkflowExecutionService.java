@@ -1,14 +1,13 @@
 package com.example.statemachine.service;
 
-import lombok.AllArgsConstructor;
 import com.example.statemachine.constants.ApiErrorConstants;
 import com.example.statemachine.dto.api.AvailableWorkflowTransition;
 import com.example.statemachine.dto.api.WorkflowCommandMetadata;
 import com.example.statemachine.dto.api.WorkflowDetails;
 import com.example.statemachine.dto.persistence.WorkflowInstance;
 import com.example.statemachine.dto.workflow.WorkflowDefinition;
-import com.example.statemachine.dto.workflow.WorkflowStepContext;
 import com.example.statemachine.dto.workflow.WorkflowEventProcessingResult;
+import com.example.statemachine.dto.workflow.WorkflowStepContext;
 import com.example.statemachine.enums.LogValueSanitizerFunction;
 import com.example.statemachine.enums.WorkflowEventOutcome;
 import com.example.statemachine.exception.WorkflowException;
@@ -17,6 +16,7 @@ import com.example.statemachine.repository.JdbcWorkflowHistoryRepository;
 import com.example.statemachine.repository.JdbcWorkflowInstanceRepository;
 import com.example.statemachine.statemachine.WorkflowEventProcessor;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.config.StateMachineFactory;
@@ -39,24 +39,27 @@ public class WorkflowExecutionService {
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails createWorkflow(String referenceId, String workflowKey) throws Exception {
 
-        Integer definitionId = workflowDefinitionRepository.findLatestActiveDefinitionId(workflowKey);
-        WorkflowDefinition workflowDefinition = workflowDefinitionRepository.loadWorkflowDefinition(definitionId);
+        Integer definitionId =
+                workflowDefinitionRepository.findLatestActiveDefinitionId(workflowKey);
+        WorkflowDefinition workflowDefinition =
+                workflowDefinitionRepository.loadWorkflowDefinition(definitionId);
 
-        StateMachine<String, String> stateMachine = stateMachineFactory.getStateMachine(definitionId.toString());
+        StateMachine<String, String> stateMachine =
+                stateMachineFactory.getStateMachine(definitionId.toString());
         try {
 
             stateMachine.startReactively().block();
             workflowEventProcessor.throwIfStateMachineFailed(stateMachine);
 
-            workflowInstanceRepository.createWorkflowInstance(referenceId, definitionId, stateMachine.getState().getId());
+            workflowInstanceRepository.createWorkflowInstance(
+                    referenceId, definitionId, stateMachine.getState().getId());
             stateMachinePersister.persist(stateMachine, referenceId);
-            log.debug("workflow_created definition={} state={}",
-                    definitionId, LogValueSanitizerFunction.SANITIZE.apply(stateMachine.getState().getId()));
+            log.debug(
+                    "Workflow created | definition={} | state={}",
+                    definitionId,
+                    LogValueSanitizerFunction.SANITIZE.apply(stateMachine.getState().getId()));
             return buildWorkflowDetails(
-                    referenceId,
-                    workflowDefinition,
-                    stateMachine.getState().getId(),
-                    null);
+                    referenceId, workflowDefinition, stateMachine.getState().getId(), null);
         } finally {
             stateMachine.stopReactively().block();
         }
@@ -65,25 +68,31 @@ public class WorkflowExecutionService {
     @Transactional(readOnly = true, rollbackFor = Exception.class)
     public WorkflowDetails getWorkflowState(String referenceId) throws Exception {
 
-        WorkflowInstance workflowInstance = workflowInstanceRepository.findByReferenceId(referenceId);
-        WorkflowDefinition workflowDefinition = workflowDefinitionRepository.loadWorkflowDefinition(workflowInstance.definitionId());
+        WorkflowInstance workflowInstance =
+                workflowInstanceRepository.findByReferenceId(referenceId);
+        WorkflowDefinition workflowDefinition =
+                workflowDefinitionRepository.loadWorkflowDefinition(
+                        workflowInstance.definitionId());
 
-        log.debug("workflow_state_loaded definition={} state={}",
-                workflowInstance.definitionId(), LogValueSanitizerFunction.SANITIZE.apply(workflowInstance.currentState()));
+        log.debug(
+                "Workflow state loaded | definition={} | state={}",
+                workflowInstance.definitionId(),
+                LogValueSanitizerFunction.SANITIZE.apply(workflowInstance.currentState()));
         return buildWorkflowDetails(
-                referenceId,
-                workflowDefinition,
-                workflowInstance.currentState(),
-                null);
+                referenceId, workflowDefinition, workflowInstance.currentState(), null);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetails submitEvent(WorkflowCommandMetadata commandMetadata) throws Exception {
 
-        WorkflowInstance workflowInstance = workflowInstanceRepository.findAndLockByReferenceId(commandMetadata.referenceId());
-        WorkflowDefinition workflowDefinition = workflowDefinitionRepository.loadWorkflowDefinition(workflowInstance.definitionId());
+        WorkflowInstance workflowInstance =
+                workflowInstanceRepository.findAndLockByReferenceId(commandMetadata.referenceId());
+        WorkflowDefinition workflowDefinition =
+                workflowDefinitionRepository.loadWorkflowDefinition(
+                        workflowInstance.definitionId());
 
-        StateMachine<String, String> stateMachine = stateMachineFactory.getStateMachine(workflowInstance.definitionId().toString());
+        StateMachine<String, String> stateMachine =
+                stateMachineFactory.getStateMachine(workflowInstance.definitionId().toString());
 
         try {
             stateMachinePersister.restore(stateMachine, commandMetadata.referenceId());
@@ -91,8 +100,10 @@ public class WorkflowExecutionService {
 
             String eventCode = commandMetadata.event();
 
-            if (workflowDefinition.transitions().stream().noneMatch(transition -> transition.event().equals(eventCode))) {
-                throw WorkflowException.invalid("Unknown event for this workflow definition: " + eventCode);
+            if (workflowDefinition.transitions().stream()
+                    .noneMatch(transition -> transition.event().equals(eventCode))) {
+                throw WorkflowException.invalid(
+                        "Unknown event for this workflow definition: " + eventCode);
             }
 
             processAndRecordEvent(stateMachine, eventCode, workflowDefinition, commandMetadata);
@@ -115,20 +126,34 @@ public class WorkflowExecutionService {
             WorkflowDefinition workflowDefinition,
             WorkflowCommandMetadata commandMetadata) {
 
-        WorkflowEventProcessingResult eventResult = workflowEventProcessor.processEvent(stateMachine, eventCode,
-                new WorkflowStepContext(commandMetadata, workflowDefinition.id(),
-                        workflowDefinition.workflowKey(), workflowDefinition.version()));
+        WorkflowEventProcessingResult eventResult =
+                workflowEventProcessor.processEvent(
+                        stateMachine,
+                        eventCode,
+                        new WorkflowStepContext(
+                                commandMetadata,
+                                workflowDefinition.id(),
+                                workflowDefinition.workflowKey(),
+                                workflowDefinition.version()));
 
-        log.debug("workflow_event_processed event={} sourceState={} targetState={} outcome={}",
-                LogValueSanitizerFunction.SANITIZE.apply(eventCode), LogValueSanitizerFunction.SANITIZE.apply(eventResult.previousState()), LogValueSanitizerFunction.SANITIZE.apply(eventResult.currentState()), eventResult.outcome());
+        log.debug(
+                "Workflow event processed | event={} | sourceState={} | targetState={} | outcome={}",
+                LogValueSanitizerFunction.SANITIZE.apply(eventCode),
+                LogValueSanitizerFunction.SANITIZE.apply(eventResult.previousState()),
+                LogValueSanitizerFunction.SANITIZE.apply(eventResult.currentState()),
+                eventResult.outcome());
 
         switch (eventResult.outcome()) {
-            case EVENT_NOT_ALLOWED -> throw WorkflowException.conflict(
-                                    ApiErrorConstants.EVENT_NOT_ALLOWED,
-                                    eventCode + " is not allowed while the workflow is " + eventResult.currentState() + "."
-                                    );
+            case EVENT_NOT_ALLOWED ->
+                    throw WorkflowException.conflict(
+                            ApiErrorConstants.EVENT_NOT_ALLOWED,
+                            eventCode
+                                    + " is not allowed while the workflow is "
+                                    + eventResult.currentState()
+                                    + ".");
 
-            case APPLIED -> workflowHistoryRepository.recordTransition(
+            case APPLIED ->
+                    workflowHistoryRepository.recordTransition(
                             commandMetadata.referenceId(),
                             workflowDefinition.id(),
                             eventResult.previousState(),
@@ -146,15 +171,16 @@ public class WorkflowExecutionService {
             WorkflowEventOutcome eventOutcome) {
 
         List<AvailableWorkflowTransition> availableTransitions =
-                        workflowDefinition.transitions()
-                        .stream()
+                workflowDefinition.transitions().stream()
                         .filter(transition -> transition.source().equals(stateCode))
-                        .map( transition ->
-                                new AvailableWorkflowTransition(transition.event(), transition.target())
-                        )
+                        .map(
+                                transition ->
+                                        new AvailableWorkflowTransition(
+                                                transition.event(), transition.target()))
                         .toList();
 
-        AvailableWorkflowTransition nextTransition = availableTransitions.size() == 1 ? availableTransitions.getFirst() : null;
+        AvailableWorkflowTransition nextTransition =
+                availableTransitions.size() == 1 ? availableTransitions.getFirst() : null;
 
         return new WorkflowDetails(
                 referenceId,
@@ -165,7 +191,6 @@ public class WorkflowExecutionService {
                 nextTransition == null ? null : nextTransition.nextState(),
                 workflowDefinition.getState(stateCode).terminal(),
                 availableTransitions,
-                eventOutcome
-        );
+                eventOutcome);
     }
 }

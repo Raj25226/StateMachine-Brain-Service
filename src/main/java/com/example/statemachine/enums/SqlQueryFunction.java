@@ -9,7 +9,10 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.core.io.ClassPathResource;
 
-/** Loads the packaged SQL catalog once and resolves queries using a parent group and constant suffix. */
+/**
+ * Loads the packaged SQL catalog once and resolves queries using a parent group and constant
+ * suffix.
+ */
 public enum SqlQueryFunction implements BiFunction<String, String, String> {
     GET_QUERY;
 
@@ -20,10 +23,16 @@ public enum SqlQueryFunction implements BiFunction<String, String, String> {
         yamlLoader.setResources(new ClassPathResource(SqlQueryConstants.RESOURCE_NAME));
         Properties queryProperties = yamlLoader.getObject();
         if (queryProperties == null || queryProperties.isEmpty()) {
-            throw new IllegalStateException("SQL query catalog is empty: " + SqlQueryConstants.RESOURCE_NAME);
+            throw new IllegalStateException(
+                    "SQL query catalog is empty: " + SqlQueryConstants.RESOURCE_NAME);
         }
-        queriesByKey = Map.copyOf(queryProperties.stringPropertyNames().stream()
-                .collect(Collectors.toMap(Function.identity(), queryProperties::getProperty)));
+        queriesByKey =
+                Map.copyOf(
+                        queryProperties.stringPropertyNames().stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                Function.identity(),
+                                                queryProperties::getProperty)));
     }
 
     @Override

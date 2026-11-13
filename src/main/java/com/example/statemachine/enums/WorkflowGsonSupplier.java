@@ -23,7 +23,8 @@ public enum WorkflowGsonSupplier implements Supplier<Gson> {
                 .registerTypeAdapter(WorkflowRequest.class, new WorkflowRequestTypeAdapter())
                 .registerTypeAdapterFactory(new WorkflowResponseTypeAdapterFactory())
                 .setStrictness(Strictness.STRICT)
-                .setObjectToNumberStrategy(reader -> JsonNumberParserFunction.PARSE.apply(reader.nextString()))
+                .setObjectToNumberStrategy(
+                        reader -> JsonNumberParserFunction.PARSE.apply(reader.nextString()))
                 .create();
     }
 }

@@ -5,7 +5,9 @@ import com.example.statemachine.dto.api.WorkflowResponse;
 import com.google.gson.Gson;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
 
-/** Uses Gson for workflow envelopes without intercepting Swagger's own documents or static content. */
+/**
+ * Uses Gson for workflow envelopes without intercepting Swagger's own documents or static content.
+ */
 public class WorkflowGsonHttpMessageConverter extends GsonHttpMessageConverter {
     public WorkflowGsonHttpMessageConverter(Gson gson) {
         super(gson);

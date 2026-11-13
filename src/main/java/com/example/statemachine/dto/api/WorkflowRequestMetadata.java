@@ -1,6 +1,5 @@
 package com.example.statemachine.dto.api;
 
-
 /** Mutable transport POJO; validated commands use immutable RequestMetadata. */
 public class WorkflowRequestMetadata {
     private String operation;

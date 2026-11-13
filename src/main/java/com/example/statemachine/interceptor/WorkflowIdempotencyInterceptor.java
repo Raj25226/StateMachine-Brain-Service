@@ -19,7 +19,8 @@ public class WorkflowIdempotencyInterceptor implements MethodInterceptor {
     private final Gson gson;
 
     // Resolve the service after advisors are ready so its JDBC transaction proxy is retained.
-    public WorkflowIdempotencyInterceptor(@Lazy WorkflowIdempotencyService workflowIdempotencyService, Gson gson) {
+    public WorkflowIdempotencyInterceptor(
+            @Lazy WorkflowIdempotencyService workflowIdempotencyService, Gson gson) {
         this.workflowIdempotencyService = workflowIdempotencyService;
         this.gson = gson;
     }
@@ -31,7 +32,7 @@ public class WorkflowIdempotencyInterceptor implements MethodInterceptor {
             return invocation.proceed();
         }
 
-        log.debug("workflow_idempotency_intercepted operation={}", command.operation());
+        log.debug("Workflow idempotency intercepted | operation={}", command.operation());
         String requestFingerprint = WorkflowRequestFingerprintFunction.SHA_256.apply(command, gson);
         // The service handles claims/replays and completes Redis only after the JDBC commit.
         return workflowIdempotencyService.execute(command, requestFingerprint);

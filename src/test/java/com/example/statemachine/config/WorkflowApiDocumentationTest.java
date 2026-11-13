@@ -1,5 +1,7 @@
 package com.example.statemachine.config;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.statemachine.controller.WorkflowController;
 import com.example.statemachine.dto.api.WorkflowRequest;
 import com.example.statemachine.dto.api.WorkflowResponse;
@@ -15,13 +17,12 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class WorkflowApiDocumentationTest {
     private final Gson gson = new GsonConfiguration().gson();
 
     private Method endpoint() throws NoSuchMethodException {
-        return WorkflowController.class.getMethod("processWorkflowCommand", WorkflowRequest.class, HttpServletRequest.class);
+        return WorkflowController.class.getMethod(
+                "processWorkflowCommand", WorkflowRequest.class, HttpServletRequest.class);
     }
 
     @Test
@@ -29,14 +30,18 @@ class WorkflowApiDocumentationTest {
         Operation operation = endpoint().getAnnotation(Operation.class);
         WorkflowRequestValidator validator = new WorkflowRequestValidator();
         for (ExampleObject example : operation.requestBody().content()[0].examples()) {
-            assertDoesNotThrow(() -> validator.validate(gson.fromJson(example.value(), WorkflowRequest.class)), example.name());
+            assertDoesNotThrow(
+                    () -> validator.validate(gson.fromJson(example.value(), WorkflowRequest.class)),
+                    example.name());
         }
     }
 
     @Test
     void allDocumentedResponsesMatchRuntimeDtosAndHttpStatus() throws NoSuchMethodException {
         for (ApiResponse response : endpoint().getAnnotation(ApiResponses.class).value()) {
-            assertTrue(Arrays.stream(response.headers()).anyMatch(header -> header.name().equals("X-Correlation-Id")));
+            assertTrue(
+                    Arrays.stream(response.headers())
+                            .anyMatch(header -> header.name().equals("X-Correlation-Id")));
             for (ExampleObject example : response.content()[0].examples()) {
                 WorkflowResponse body = gson.fromJson(example.value(), WorkflowResponse.class);
                 if (Integer.parseInt(response.responseCode()) >= 400) {
