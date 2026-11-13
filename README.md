@@ -45,12 +45,12 @@ export DB_URL='jdbc:postgresql://localhost:5432/workflow'
 export DB_USERNAME='admin'
 export DB_PASSWORD='admin'
 export SERVER_PORT='8081'
-export REDIS_HOST='localhost'
-export REDIS_PORT='6379'
+export COMMON_DS_CACHE_REDIS_HOST='localhost'
+export COMMON_DS_CACHE_REDIS_PORT='6379'
 mvn spring-boot:run
 ```
 
-The values above match the local defaults in
+Set the Redis host and port explicitly. The other values above match the local defaults in
 [application.yml](src/main/resources/application.yml). Change them for your
 PostgreSQL installation. `workflow` is the database name; `workflow_brain` is the
 schema inside that database.
@@ -61,12 +61,18 @@ schema inside that database.
 | `DB_USERNAME` | `admin` |
 | `DB_PASSWORD` | `admin` |
 | `SERVER_PORT` | `8081` |
-| `REDIS_HOST` | `localhost` |
-| `REDIS_PORT` | `6379` |
-| `REDIS_PASSWORD` | empty |
+| `COMMON_DS_CACHE_REDIS_HOST` | required |
+| `COMMON_DS_CACHE_REDIS_PORT` | required |
+| `COMMON_DS_CACHE_REDIS_PASSWORD` | empty |
+| `COMMON_DS_REDIS_TLS_ENABLED` | `false` |
+| `COMMON_DS_REDIS_CA_CERT` | CA certificate filesystem path; required with TLS |
 | `ACL_BASE_URL` | `http://localhost:8082` |
 | `ACL_TIMEOUT` | `10s` |
 | `IDEMPOTENCY_TTL_MINUTES` | `-1` (no expiry) |
+
+The Redis connection uses RESP3 and suppresses Lettuce library metadata. TLS follows
+the supplied connection configuration with peer verification disabled. Workflow
+idempotency continues to use string values and atomic Lua scripts.
 
 Start Redis separately with persistence and eviction settings appropriate for
 idempotency storage, for example:
